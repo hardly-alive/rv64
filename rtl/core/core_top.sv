@@ -30,6 +30,10 @@ module core_top
     logic [63:0] id_pc;
     logic [31:0] id_instr;
 
+    //Regfile signals
+    logic [63:0] reg_rs1_data;
+    logic [63:0] reg_rs2_data; 
+
     // ---------------------------------------------------------
     // 1. FETCH STAGE
     // ---------------------------------------------------------
@@ -87,6 +91,39 @@ module core_top
     /* verilator lint_on PINCONNECTEMPTY */
 
     // ---------------------------------------------------------
+    // 5. REGISTER FILE
+    // ---------------------------------------------------------
+    regfile u_regfile (
+        .clk        (clk),
+        .rst_n      (rst_n),
+
+        // Read Port 1
+        .rs1_addr_i (dec_rs1),      // From Decode
+        .rs1_data_o (reg_rs1_data), // To Execute (eventually)
+
+        // Read Port 2
+        .rs2_addr_i (dec_rs2),      // From Decode
+        .rs2_data_o (reg_rs2_data), // To Execute (eventually)
+
+        // Write Port (UNUSED FOR NOW)
+        .rd_addr_i  (5'b0),
+        .rd_data_i  (64'b0),
+        .rd_wen_i   (1'b0)
+    );
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ---------------------------------------------------------
     // Expose fetch address to top-level output (for debugging)
     // ---------------------------------------------------------
     assign imem_addr = fetch_addr;
@@ -107,6 +144,8 @@ module core_top
     logic [4:0]  unused_rs2;
     logic [4:0]  unused_rd;
     logic [63:0] unused_id_pc;
+    logic [63:0] unused_rs1_data;
+    logic [63:0] unused_rs2_data;  
     
     assign unused_imem = imem_rdata;
     assign unused_dmem = dmem_rdata;
@@ -116,6 +155,8 @@ module core_top
     assign unused_rs2    = dec_rs2;
     assign unused_rd     = dec_rd;
     assign unused_id_pc = id_pc;
+    assign unused_rs1_data = reg_rs1_data;
+    assign unused_rs2_data = reg_rs2_data;
     /* verilator lint_on UNUSED */
 
 endmodule
