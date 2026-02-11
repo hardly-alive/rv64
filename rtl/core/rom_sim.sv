@@ -11,16 +11,25 @@ module rom_sim (
 
 
     initial begin
-        // Reset everything to 0 (NOPs)
-        for (int i=0; i<1024; i++) mem[i] = 32'h0000_0013; // ADDI x0, x0, 0 (NOP)
+        // Reset everything to NOPs
+        for (int i=0; i<1024; i++) mem[i] = 32'h0000_0013;
 
-        // Program at Address 0:
-        // 1. ADDI x1, x0, 5  (x1 = 5)  -> Hex: 00500093
+        // 1. ADDI x1, x0, 5
         mem[0] = 32'h00500093; 
-        // 2. ADDI x2, x0, 10 (x2 = 10) -> Hex: 00a00113
-        mem[1] = 32'h00a00113;
-        // 3. ADD  x3, x1, x2 (x3 = 15) -> Hex: 002081b3
-        mem[2] = 32'h002081b3;
+        
+        // NOP (Delay to let x1 write back)
+        mem[1] = 32'h0000_0013; 
+        mem[2] = 32'h0000_0013;
+
+        // 2. ADDI x2, x0, 10
+        mem[3] = 32'h00a00113;
+
+        // NOP (Delay to let x2 write back)
+        mem[4] = 32'h0000_0013;
+        mem[5] = 32'h0000_0013;
+
+        // 3. ADD x3, x1, x2  (Should now see 5 + 10)
+        mem[6] = 32'h002081b3;
     end
 
     // 3. Read Logic (Word Aligned)
