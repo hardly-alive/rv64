@@ -8,6 +8,8 @@ module id_ex_reg
     input  logic [63:0] rs1_data_i,
     input  logic [63:0] rs2_data_i,
     input  logic [63:0] imm_i,
+    input  logic [4:0]  rs1_addr_i, 
+    input  logic [4:0]  rs2_addr_i, 
     input  logic [4:0]  rd_addr_i,
     input  alu_op_t     alu_op_i,
     input  logic        reg_write_i,
@@ -17,6 +19,8 @@ module id_ex_reg
     output logic [63:0] rs1_data_o,
     output logic [63:0] rs2_data_o,
     output logic [63:0] imm_o,
+    output logic [4:0]  rs1_addr_o, 
+    output logic [4:0]  rs2_addr_o, 
     output logic [4:0]  rd_addr_o,
     output alu_op_t     alu_op_o,
     output logic        reg_write_o,
@@ -28,6 +32,8 @@ module id_ex_reg
             rs1_data_o  <= 64'b0;
             rs2_data_o  <= 64'b0;
             imm_o       <= 64'b0;
+            rs1_addr_o  <= 5'b0;
+            rs2_addr_o  <= 5'b0;
             rd_addr_o   <= 5'b0;
             alu_op_o    <= ALU_ADD;
             reg_write_o <= 1'b0;
@@ -36,6 +42,8 @@ module id_ex_reg
             rs1_data_o  <= rs1_data_i;
             rs2_data_o  <= rs2_data_i;
             imm_o       <= imm_i;
+            rs1_addr_o  <= rs1_addr_i; 
+            rs2_addr_o  <= rs2_addr_i; 
             rd_addr_o   <= rd_addr_i;
             alu_op_o    <= alu_op_i;
             reg_write_o <= reg_write_i;

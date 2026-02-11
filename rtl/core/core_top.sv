@@ -47,8 +47,28 @@ module core_top
     logic        ex_alu_src;
 
     // ALU Signals
-    logic [63:0] alu_operand_b;
+    logic [4:0]  ex_rs1_addr;
+    logic [4:0]  ex_rs2_addr;
     logic [63:0] alu_result;
+
+    // EX/MEM Pipeline Signals
+    logic [63:0] mem_alu_result;
+    logic [63:0] mem_rs2_data;
+    logic [4:0]  mem_rd_addr;
+    logic        mem_reg_write;
+
+    // Forwarding Signals
+    logic [63:0] alu_operand_a;
+    logic [63:0] alu_operand_b_raw;
+    logic [63:0] alu_operand_b;
+
+    // WB Stage Signals
+    logic [63:0] wb_alu_result;
+    logic [63:0] wb_mem_data;
+    logic [63:0] wb_final_data;
+    logic [4:0]  wb_rd_addr;
+    logic        wb_reg_write;
+    logic        wb_mem_to_reg;
 
     // ---------------------------------------------------------
     // STAGE 1: FETCH
@@ -86,35 +106,13 @@ module core_top
     // ---------------------------------------------------------
     decode u_decode (
         .instr_i    (id_instr),
-        
         .rs1_addr_o (dec_rs1),
         .rs2_addr_o (dec_rs2),
         .rd_addr_o  (dec_rd),
-        
-        // Control Signals
         .alu_op_o   (dec_alu_op),
         .reg_write_o(dec_reg_write),
         .alu_src_o  (dec_alu_src),
         .imm_o      (dec_imm)
-    );
-
-    // ---------------------------------------------------------
-    // REGISTER FILE (Read)
-    // ---------------------------------------------------------
-    regfile u_regfile (
-        .clk        (clk),
-        .rst_n      (rst_n),
-        .rs1_addr_i (dec_rs1),
-        .rs1_data_o (reg_rs1_data),
-        .rs2_addr_i (dec_rs2),
-        .rs2_data_o (reg_rs2_data),
-        
-        // Write Port (Temporary: Loopback for testing)
-        // In real 5-stage, this comes from WB stage! 
-        // For M1, we wire ALU result directly back (SHORTCUT for testing)
-        .rd_addr_i  (ex_rd_addr),
-        .rd_data_i  (alu_result),
-        .rd_wen_i   (ex_reg_write)
     );
 
     // ---------------------------------------------------------
@@ -123,10 +121,11 @@ module core_top
     id_ex_reg u_id_ex (
         .clk         (clk),
         .rst_n       (rst_n),
-        
         .rs1_data_i  (reg_rs1_data),
         .rs2_data_i  (reg_rs2_data),
         .imm_i       (dec_imm),
+        .rs1_addr_i  (dec_rs1),   
+        .rs2_addr_i  (dec_rs2),  
         .rd_addr_i   (dec_rd),
         .alu_op_i    (dec_alu_op),
         .reg_write_i (dec_reg_write),
@@ -135,6 +134,8 @@ module core_top
         .rs1_data_o  (ex_rs1_data),
         .rs2_data_o  (ex_rs2_data),
         .imm_o       (ex_imm),
+        .rs1_addr_o  (ex_rs1_addr), 
+        .rs2_addr_o  (ex_rs2_addr), 
         .rd_addr_o   (ex_rd_addr),
         .alu_op_o    (ex_alu_op),
         .reg_write_o (ex_reg_write),
@@ -142,17 +143,95 @@ module core_top
     );
 
     // ---------------------------------------------------------
+    // FORWARDING LOGIC
+    // ---------------------------------------------------------
+    // Operand A
+    always_comb begin
+        if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs1_addr)) begin
+            alu_operand_a = mem_alu_result; // Forward from MEM
+        end else if (wb_reg_write && (wb_rd_addr != 0) && (wb_rd_addr == ex_rs1_addr)) begin
+            alu_operand_a = wb_final_data;  // Forward from WB
+        end else begin
+            alu_operand_a = ex_rs1_data;    // No Hazard
+        end
+    end
+
+    // Operand B
+    always_comb begin
+        if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs2_addr)) begin
+            alu_operand_b_raw = mem_alu_result; // Forward from MEM
+        end else if (wb_reg_write && (wb_rd_addr != 0) && (wb_rd_addr == ex_rs2_addr)) begin
+            alu_operand_b_raw = wb_final_data;  // Forward from WB
+        end else begin
+            alu_operand_b_raw = ex_rs2_data;    // No Hazard
+        end
+    end
+
+    // ---------------------------------------------------------
     // STAGE 3: EXECUTE
     // ---------------------------------------------------------
-    
-    // MUX: Select Register 2 or Immediate
-    assign alu_operand_b = (ex_alu_src) ? ex_imm : ex_rs2_data;
+    assign alu_operand_b = (ex_alu_src) ? ex_imm : alu_operand_b_raw;
 
     alu u_alu (
         .alu_op_i (ex_alu_op),
-        .op_a_i   (ex_rs1_data),
+        .op_a_i   (alu_operand_a),
         .op_b_i   (alu_operand_b),
         .result_o (alu_result)
+    );
+
+    // ---------------------------------------------------------
+    // PIPELINE: EX -> MEM
+    // ---------------------------------------------------------
+    ex_mem_reg u_ex_mem (
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .alu_result_i (alu_result),
+        .rs2_data_i   (ex_rs2_data),
+        .rd_addr_i    (ex_rd_addr),
+        .reg_write_i  (ex_reg_write),
+        
+        .alu_result_o (mem_alu_result),
+        .rs2_data_o   (mem_rs2_data),
+        .rd_addr_o    (mem_rd_addr),
+        .reg_write_o  (mem_reg_write)
+    );
+
+    // ---------------------------------------------------------
+    // PIPELINE: MEM -> WB
+    // ---------------------------------------------------------
+    mem_wb_reg u_mem_wb (
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .alu_result_i (mem_alu_result),
+        .mem_data_i   (64'b0),
+        .rd_addr_i    (mem_rd_addr),
+        .reg_write_i  (mem_reg_write),
+        .mem_to_reg_i (1'b0),
+
+        .alu_result_o (wb_alu_result),
+        .mem_data_o   (wb_mem_data),
+        .rd_addr_o    (wb_rd_addr),
+        .reg_write_o  (wb_reg_write),
+        .mem_to_reg_o (wb_mem_to_reg)
+    );
+
+    // ---------------------------------------------------------
+    // STAGE 5: WRITEBACK
+    // ---------------------------------------------------------
+    assign wb_final_data = (wb_mem_to_reg) ? wb_mem_data : wb_alu_result;
+
+    regfile u_regfile (
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .rs1_addr_i (dec_rs1),
+        .rs1_data_o (reg_rs1_data),
+        .rs2_addr_i (dec_rs2),
+        .rs2_data_o (reg_rs2_data),
+        
+        // Write Port (Stage 5)
+        .rd_addr_i  (wb_rd_addr),
+        .rd_data_i  (wb_final_data),
+        .rd_wen_i   (wb_reg_write)
     );
 
     // ---------------------------------------------------------
@@ -160,7 +239,6 @@ module core_top
     // ---------------------------------------------------------
     assign imem_addr = fetch_addr;
     
-    // Clean up unused signals
     assign dmem_addr  = 64'b0;
     assign dmem_wdata = 64'b0;
     assign dmem_wen   = 1'b0;
@@ -169,10 +247,12 @@ module core_top
     logic [31:0] unused_imem;
     logic [63:0] unused_dmem;
     logic [63:0] unused_pc, unused_id_pc;
+    logic [63:0] unused_rs2_data;
     assign unused_imem = imem_rdata;
     assign unused_dmem = dmem_rdata;
     assign unused_pc   = current_pc;
     assign unused_id_pc = id_pc;
+    assign unused_rs2_data = mem_rs2_data;
     /* verilator lint_on UNUSED */
 
 endmodule

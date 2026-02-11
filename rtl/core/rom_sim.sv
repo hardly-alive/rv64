@@ -16,20 +16,10 @@ module rom_sim (
 
         // 1. ADDI x1, x0, 5
         mem[0] = 32'h00500093; 
-        
-        // NOP (Delay to let x1 write back)
-        mem[1] = 32'h0000_0013; 
-        mem[2] = 32'h0000_0013;
-
         // 2. ADDI x2, x0, 10
-        mem[3] = 32'h00a00113;
-
-        // NOP (Delay to let x2 write back)
-        mem[4] = 32'h0000_0013;
-        mem[5] = 32'h0000_0013;
-
+        mem[1] = 32'h00a00113;
         // 3. ADD x3, x1, x2  (Should now see 5 + 10)
-        mem[6] = 32'h002081b3;
+        mem[2] = 32'h002081b3;
     end
 
     // 3. Read Logic (Word Aligned)
