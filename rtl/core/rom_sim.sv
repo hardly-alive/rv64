@@ -33,37 +33,23 @@ module rom_sim (
     initial begin
         for (int i=0; i<4096; i++) mem[i] = 8'h0;
 
-        // 1. ADDI x1, x0, 5  (Loop Counter = 5)
-        // 00500093
-        mem[0] = 8'h93; mem[1] = 8'h00; mem[2] = 8'h50; mem[3] = 8'h00;
+        // 1. ADDI x1, x0, 10 (Address 10)
+        // 00A00093
+        mem[0] = 8'h93; mem[1] = 8'h00; mem[2] = 8'hA0; mem[3] = 8'h00;
 
-        // 2. ADDI x2, x0, 0  (Accumulator = 0)
-        // 00000113
-        mem[4] = 8'h13; mem[5] = 8'h01; mem[6] = 8'h00; mem[7] = 8'h00;
+        // 2. SW x1, 0(x0) (Store 10 at addr 0)
+        // 00102023
+        mem[4] = 8'h23; mem[5] = 8'h20; mem[6] = 8'h10; mem[7] = 8'h00;
 
-        // --- LOOP START (Address 8) ---
-        
-        // 3. ADD x2, x2, x1  (Accumulate: x2 = x2 + x1)
-        // 00110133
-        mem[8] = 8'h33; mem[9] = 8'h01; mem[10]= 8'h11; mem[11]= 8'h00;
+        // 3. LW x2, 0(x0) (Load 10 into x2)
+        // 00002103
+        mem[8] = 8'h03; mem[9] = 8'h21; mem[10]= 8'h00; mem[11]= 8'h00;
 
-        // 4. ADDI x1, x1, -1 (Decrement: x1 = x1 - 1)
-        // FFF08093
-        mem[12]= 8'h93; mem[13]= 8'h80; mem[14]= 8'hf0; mem[15]= 8'hff;
-
-        // 5. BNE x1, x0, -8  (Branch if x1 != 0, go back 8 bytes to Address 8)
-        // Offset -8 (Twos complement 1111...1000)
-        // Imm[12|10:5] = 1111111 (Top bits)
-        // Imm[4:1|11]  = 1100 (Bottom bits)
-        // Opcode BNE = 1100011
-        // Hex: FE009CE3
-        mem[16]= 8'he3; mem[17]= 8'h9c; mem[18]= 8'h00; mem[19]= 8'hfe;
-        
-        // --- LOOP END ---
-
-        // 6. SW x2, 100(x0) (Store Result 15 to memory address 100)
-        // 06202223
-        mem[20]= 8'h23; mem[21]= 8'h22; mem[22]= 8'h20; mem[23]= 8'h06;
+        // 4. ADDI x3, x2, 5 (Try to use x2 immediately!) 
+        // THIS IS THE HAZARD. x2 is not ready yet.
+        // Hazard Unit should insert a bubble. Result x3 should be 15 (0xF).
+        // 00510193
+        mem[12]= 8'h93; mem[13]= 8'h01; mem[14]= 8'h51; mem[15]= 8'h00;
     end
 
     // Port A Read
