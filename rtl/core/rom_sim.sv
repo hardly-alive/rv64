@@ -32,27 +32,8 @@ module rom_sim (
     // Initialize
     initial begin
         for (int i=0; i<4096; i++) mem[i] = 8'h0;
-
-        // 1. ADDI x1, x0, 5  (x1 = 5)
-        // 00500093
-        mem[0] = 8'h93; mem[1] = 8'h00; mem[2] = 8'h50; mem[3] = 8'h00;
-
-        // 2. ADDI x2, x0, 10 (x2 = 10)
-        // 00A00113
-        mem[4] = 8'h13; mem[5] = 8'h01; mem[6] = 8'hA0; mem[7] = 8'h00;
-
-        // 3. MUL x3, x1, x2  (x3 = 5 * 10 = 50 / 0x32)
-        // Opcode: 0110011 (Reg-Reg)
-        // Funct3: 000 (MUL)
-        // Funct7: 0000001 (M-Ext)
-        // RD=3 (x3), RS1=1 (x1), RS2=2 (x2)
-        // Hex: 022081B3
-        mem[8] = 8'hB3; mem[9] = 8'h81; mem[10]= 8'h20; mem[11]= 8'h02;
-
-        // 4. ADDI x4, x3, 1  (x4 = 50 + 1 = 51 / 0x33)
-        // This instruction MUST WAIT for MUL to finish!
-        // 00118213
-        mem[12]= 8'h13; mem[13]= 8'h82; mem[14]= 8'h11; mem[15]= 8'h00;
+        // Load the Hex File
+        $readmemh("sw/program.hex", mem);
     end
 
     // Port A Read
