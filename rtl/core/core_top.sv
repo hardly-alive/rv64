@@ -16,11 +16,13 @@ module core_top
     // ---------------------------------------------------------
     // Wires
     // ---------------------------------------------------------
-    // Hazard Unit Signals
-    logic stall_if;
+    // Stall/Flush Signals
+    logic stall_hazard; // From Hazard Unit
+    logic stall_mul;    // From Multiplier
+    logic stall_global; // OR of all stalls
+    logic flush_ex;     // From Hazard Unit
+    logic flush_mem;    // From Multiplier (to insert bubble in MEM)
     logic stall_id;
-    logic flush_ex;
-    logic stall_if_combined; // Stall from Hazard OR misc
 
     logic [63:0] current_pc;
     logic [63:0] fetch_addr;
@@ -38,15 +40,16 @@ module core_top
     alu_op_t     dec_alu_op;
     lsu_op_t     dec_lsu_op;
     branch_op_t  dec_branch_op;
+    mul_op_t     dec_mul_op;     // NEW
     logic        dec_reg_write;
     logic        dec_alu_src;
     logic        dec_mem_write;
-    logic        dec_mem_read;   // NEW
+    logic        dec_mem_read;   
     logic        dec_mem_to_reg;
     logic        dec_is_jump;
     logic        dec_is_jalr;
-    logic        dec_is_lui;     // NEW
-    logic        dec_is_auipc;   // NEW
+    logic        dec_is_lui;     
+    logic        dec_is_auipc;   
 
     // Regfile Outputs
     logic [63:0] reg_rs1_data;
@@ -61,20 +64,23 @@ module core_top
     alu_op_t     ex_alu_op;
     lsu_op_t     ex_lsu_op;
     branch_op_t  ex_branch_op;
+    mul_op_t     ex_mul_op;      // NEW
     logic        ex_reg_write;
     logic        ex_alu_src;
     logic        ex_mem_write;
-    logic        ex_mem_read;    // NEW
+    logic        ex_mem_read;    
     logic        ex_mem_to_reg;
     logic        ex_is_jump;
     logic        ex_is_jalr;
-    logic        ex_is_lui;      // NEW
-    logic        ex_is_auipc;    // NEW
+    logic        ex_is_lui;      
+    logic        ex_is_auipc;    
 
-    // ALU & Branch Signals
+    // ALU/Branch/Mul Signals
     logic [4:0]  ex_rs1_addr;
     logic [4:0]  ex_rs2_addr;
     logic [63:0] alu_result;
+    logic [63:0] mul_result;     // NEW
+    logic [63:0] final_ex_result;// NEW (Mux between ALU and MUL)
     logic [63:0] branch_target;
     logic        branch_taken;
     logic        pc_redirect;
@@ -82,7 +88,6 @@ module core_top
     // Forwarding Signals
     logic [63:0] alu_operand_a;
     logic [63:0] alu_operand_b_raw;
-    // logic [63:0] alu_operand_b; // Removed, using alu_final_b logic
 
     // EX/MEM Signals
     logic [63:0] mem_alu_result;
@@ -107,16 +112,20 @@ module core_top
     logic        wb_mem_to_reg;
 
     // ---------------------------------------------------------
+    // STALL LOGIC
+    // ---------------------------------------------------------
+    assign stall_global = stall_hazard | stall_mul; 
+    assign flush_mem    = stall_mul; // If multiplying, insert bubbles into MEM
+
+    // ---------------------------------------------------------
     // STAGE 1: FETCH
     // ---------------------------------------------------------
-    assign stall_if_combined = stall_if; 
-
     fetch u_fetch (
         .clk             (clk),
         .rst_n           (rst_n),
         .branch_target_i (branch_target),
         .branch_taken_i  (pc_redirect),
-        .stall_i         (stall_if_combined), // Hazard Stall connected
+        .stall_i         (stall_global), // Freeze PC
         .imem_addr_o     (fetch_addr),
         .pc_out_o        (current_pc)
     );
@@ -139,8 +148,8 @@ module core_top
     if_id_reg u_if_id (
         .clk      (clk),
         .rst_n    (rst_n),
-        .stall_i  (stall_id),      // Hazard Stall connected
-        .flush_i  (pc_redirect),   // Branch Flush
+        .stall_i  (stall_global),  // Freeze Instruction
+        .flush_i  (pc_redirect),   
         .pc_i     (current_pc),
         .instr_i  (raw_instr),
         .pc_o     (id_pc),
@@ -148,7 +157,7 @@ module core_top
     );
 
     // ---------------------------------------------------------
-    // STAGE 2: DECODE & HAZARD DETECTION
+    // STAGE 2: DECODE
     // ---------------------------------------------------------
     decode u_decode (
         .instr_i      (id_instr),
@@ -158,26 +167,27 @@ module core_top
         .alu_op_o     (dec_alu_op),
         .lsu_op_o     (dec_lsu_op),
         .branch_op_o  (dec_branch_op),
+        .mul_op_o     (dec_mul_op),    // NEW
         .reg_write_o  (dec_reg_write),
         .alu_src_o    (dec_alu_src),
         .mem_write_o  (dec_mem_write),
-        .mem_read_o   (dec_mem_read),   // NEW
+        .mem_read_o   (dec_mem_read),   
         .mem_to_reg_o (dec_mem_to_reg),
         .is_jump_o    (dec_is_jump),
         .is_jalr_o    (dec_is_jalr),
-        .is_lui_o     (dec_is_lui),     // NEW
-        .is_auipc_o   (dec_is_auipc),   // NEW
+        .is_lui_o     (dec_is_lui),     
+        .is_auipc_o   (dec_is_auipc),   
         .imm_o        (dec_imm)
     );
 
-    // HAZARD UNIT INSTANTIATION
+    // Hazard Unit
     hazard_unit u_hazard (
         .id_rs1_addr_i (dec_rs1),
         .id_rs2_addr_i (dec_rs2),
         .ex_rd_addr_i  (ex_rd_addr),
         .ex_mem_read_i (ex_mem_read),
-        .stall_if_o    (stall_if),
-        .stall_id_o    (stall_id),
+        .stall_if_o    (stall_hazard), // Separate wire
+        .stall_id_o    (stall_id),     // unused, we use stall_global
         .flush_ex_o    (flush_ex)
     );
 
@@ -187,7 +197,8 @@ module core_top
     id_ex_reg u_id_ex (
         .clk          (clk),
         .rst_n        (rst_n),
-        .flush_i      (pc_redirect || flush_ex), // Flush if Branch OR Hazard
+        .flush_i      (pc_redirect || flush_ex),
+        .stall_i      (stall_global),  // NEW: Freeze EX input on Stall
         
         .pc_i         (id_pc),
         .rs1_data_i   (reg_rs1_data),
@@ -199,15 +210,16 @@ module core_top
         .alu_op_i     (dec_alu_op),
         .lsu_op_i     (dec_lsu_op),
         .branch_op_i  (dec_branch_op),
+        .mul_op_i     (dec_mul_op),    // NEW
         .reg_write_i  (dec_reg_write),
         .alu_src_i    (dec_alu_src),
         .mem_write_i  (dec_mem_write),
-        .mem_read_i   (dec_mem_read),    // NEW
+        .mem_read_i   (dec_mem_read),    
         .mem_to_reg_i (dec_mem_to_reg),
         .is_jump_i    (dec_is_jump),
         .is_jalr_i    (dec_is_jalr),
-        .is_lui_i     (dec_is_lui),      // NEW
-        .is_auipc_i   (dec_is_auipc),    // NEW
+        .is_lui_i     (dec_is_lui),      
+        .is_auipc_i   (dec_is_auipc),    
         
         .pc_o         (ex_pc),
         .rs1_data_o   (ex_rs1_data),
@@ -219,20 +231,22 @@ module core_top
         .alu_op_o     (ex_alu_op),
         .lsu_op_o     (ex_lsu_op),
         .branch_op_o  (ex_branch_op),
+        .mul_op_o     (ex_mul_op),     // NEW
         .reg_write_o  (ex_reg_write),
         .alu_src_o    (ex_alu_src),
         .mem_write_o  (ex_mem_write),
-        .mem_read_o   (ex_mem_read),    // NEW
+        .mem_read_o   (ex_mem_read),    
         .mem_to_reg_o (ex_mem_to_reg),
         .is_jump_o    (ex_is_jump),
         .is_jalr_o    (ex_is_jalr),
-        .is_lui_o     (ex_is_lui),      // NEW
-        .is_auipc_o   (ex_is_auipc)     // NEW
+        .is_lui_o     (ex_is_lui),      
+        .is_auipc_o   (ex_is_auipc)     
     );
 
     // ---------------------------------------------------------
-    // FORWARDING LOGIC
+    // FORWARDING & OPERANDS
     // ---------------------------------------------------------
+    // Same as before...
     always_comb begin
         if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs1_addr)) begin
              if (mem_mem_to_reg) alu_operand_a = lsu_final_data;
@@ -270,7 +284,7 @@ module core_top
     assign branch_target = (ex_is_jalr) ? (alu_operand_a + ex_imm) : (ex_pc + ex_imm);
     assign pc_redirect = branch_taken || ex_is_jump;
 
-    // ALU Input Muxing (Updated for LUI/AUIPC)
+    // ALU Input Muxing
     logic [63:0] alu_final_a;
     logic [63:0] alu_final_b;
 
@@ -279,10 +293,10 @@ module core_top
             alu_final_a = ex_pc;
             alu_final_b = 64'd4;
         end else if (ex_is_lui) begin
-            alu_final_a = 64'b0; // LUI: 0 + Imm
+            alu_final_a = 64'b0; 
             alu_final_b = ex_imm;
         end else if (ex_is_auipc) begin
-            alu_final_a = ex_pc; // AUIPC: PC + Imm
+            alu_final_a = ex_pc; 
             alu_final_b = ex_imm;
         end else begin
             alu_final_a = alu_operand_a;
@@ -297,13 +311,29 @@ module core_top
         .result_o (alu_result)
     );
 
+    // Multiplier Unit
+    multiplier u_multiplier (
+        .clk         (clk),
+        .rst_n       (rst_n),
+        .mul_op_i    (ex_mul_op),
+        .op_a_i      (alu_operand_a),
+        .op_b_i      (alu_operand_b_raw),
+        .result_o    (mul_result),
+        .stall_mul_o (stall_mul)
+    );
+
+    // MUX: Choose ALU or Multiplier Result
+    assign final_ex_result = (ex_mul_op != M_NONE) ? mul_result : alu_result;
+
     // ---------------------------------------------------------
     // PIPELINE: EX -> MEM
     // ---------------------------------------------------------
     ex_mem_reg u_ex_mem (
         .clk          (clk),
         .rst_n        (rst_n),
-        .alu_result_i (alu_result),
+        .flush_i      (flush_mem), // Flush if Stalled for MUL
+
+        .alu_result_i (final_ex_result), // Pass Muxed Result
         .store_data_i (alu_operand_b_raw), 
         .rd_addr_i    (ex_rd_addr),
         .reg_write_i  (ex_reg_write),
@@ -382,6 +412,8 @@ module core_top
     logic [63:0] unused_dmem;
     logic [63:0] unused_pc, unused_id_pc;
     logic unused_mem_write;
+    logic unused_stall_id;
+    assign unused_stall_id = stall_id; // Sink this
     assign unused_mem_write = mem_mem_write;
     assign unused_imem = imem_rdata;
     assign unused_dmem = dmem_rdata;

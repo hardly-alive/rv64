@@ -3,7 +3,8 @@ module id_ex_reg
 (
     input  logic        clk,
     input  logic        rst_n,
-    input  logic        flush_i, // Controlled by Branch OR Hazard Unit
+    input  logic        flush_i, // Kill instruction (Branch/Hazard)
+    input  logic        stall_i, // NEW: Keep instruction (Multi-Cycle Op)
 
     // Inputs
     input  logic [63:0] pc_i,
@@ -16,15 +17,16 @@ module id_ex_reg
     input  alu_op_t     alu_op_i,
     input  lsu_op_t     lsu_op_i,
     input  branch_op_t  branch_op_i,
+    input  mul_op_t     mul_op_i,     // NEW INPUT
     input  logic        reg_write_i,
     input  logic        alu_src_i,
     input  logic        mem_write_i,
-    input  logic        mem_read_i,   // NEW
+    input  logic        mem_read_i,
     input  logic        mem_to_reg_i,
     input  logic        is_jump_i,
     input  logic        is_jalr_i,
-    input  logic        is_lui_i,     // NEW
-    input  logic        is_auipc_i,   // NEW
+    input  logic        is_lui_i,
+    input  logic        is_auipc_i,
 
     // Outputs
     output logic [63:0] pc_o,
@@ -37,15 +39,16 @@ module id_ex_reg
     output alu_op_t     alu_op_o,
     output lsu_op_t     lsu_op_o,
     output branch_op_t  branch_op_o,
+    output mul_op_t     mul_op_o,     // NEW OUTPUT
     output logic        reg_write_o,
     output logic        alu_src_o,
     output logic        mem_write_o,
-    output logic        mem_read_o,   // NEW
+    output logic        mem_read_o,
     output logic        mem_to_reg_o,
     output logic        is_jump_o,
     output logic        is_jalr_o,
-    output logic        is_lui_o,     // NEW
-    output logic        is_auipc_o    // NEW
+    output logic        is_lui_o,
+    output logic        is_auipc_o
 );
 
     always_ff @(posedge clk or negedge rst_n) begin
@@ -60,6 +63,7 @@ module id_ex_reg
             alu_op_o     <= ALU_ADD;
             lsu_op_o     <= LSU_NONE;
             branch_op_o  <= BRANCH_NONE;
+            mul_op_o     <= M_NONE;    // RESET
             reg_write_o  <= 1'b0;
             alu_src_o    <= 1'b0;
             mem_write_o  <= 1'b0;
@@ -69,6 +73,8 @@ module id_ex_reg
             is_jalr_o    <= 1'b0;
             is_lui_o     <= 1'b0; 
             is_auipc_o   <= 1'b0; 
+        end else if (stall_i) begin
+            // STALL: Do nothing (Keep current values)
         end else begin
             pc_o         <= pc_i;
             rs1_data_o   <= rs1_data_i;
@@ -80,6 +86,7 @@ module id_ex_reg
             alu_op_o     <= alu_op_i;
             lsu_op_o     <= lsu_op_i;
             branch_op_o  <= branch_op_i;
+            mul_op_o     <= mul_op_i;  // PASS THROUGH
             reg_write_o  <= reg_write_i;
             alu_src_o    <= alu_src_i;
             mem_write_o  <= mem_write_i;

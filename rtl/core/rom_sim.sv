@@ -33,23 +33,26 @@ module rom_sim (
     initial begin
         for (int i=0; i<4096; i++) mem[i] = 8'h0;
 
-        // 1. ADDI x1, x0, 10 (Address 10)
-        // 00A00093
-        mem[0] = 8'h93; mem[1] = 8'h00; mem[2] = 8'hA0; mem[3] = 8'h00;
+        // 1. ADDI x1, x0, 5  (x1 = 5)
+        // 00500093
+        mem[0] = 8'h93; mem[1] = 8'h00; mem[2] = 8'h50; mem[3] = 8'h00;
 
-        // 2. SW x1, 0(x0) (Store 10 at addr 0)
-        // 00102023
-        mem[4] = 8'h23; mem[5] = 8'h20; mem[6] = 8'h10; mem[7] = 8'h00;
+        // 2. ADDI x2, x0, 10 (x2 = 10)
+        // 00A00113
+        mem[4] = 8'h13; mem[5] = 8'h01; mem[6] = 8'hA0; mem[7] = 8'h00;
 
-        // 3. LW x2, 0(x0) (Load 10 into x2)
-        // 00002103
-        mem[8] = 8'h03; mem[9] = 8'h21; mem[10]= 8'h00; mem[11]= 8'h00;
+        // 3. MUL x3, x1, x2  (x3 = 5 * 10 = 50 / 0x32)
+        // Opcode: 0110011 (Reg-Reg)
+        // Funct3: 000 (MUL)
+        // Funct7: 0000001 (M-Ext)
+        // RD=3 (x3), RS1=1 (x1), RS2=2 (x2)
+        // Hex: 022081B3
+        mem[8] = 8'hB3; mem[9] = 8'h81; mem[10]= 8'h20; mem[11]= 8'h02;
 
-        // 4. ADDI x3, x2, 5 (Try to use x2 immediately!) 
-        // THIS IS THE HAZARD. x2 is not ready yet.
-        // Hazard Unit should insert a bubble. Result x3 should be 15 (0xF).
-        // 00510193
-        mem[12]= 8'h93; mem[13]= 8'h01; mem[14]= 8'h51; mem[15]= 8'h00;
+        // 4. ADDI x4, x3, 1  (x4 = 50 + 1 = 51 / 0x33)
+        // This instruction MUST WAIT for MUL to finish!
+        // 00118213
+        mem[12]= 8'h13; mem[13]= 8'h82; mem[14]= 8'h11; mem[15]= 8'h00;
     end
 
     // Port A Read

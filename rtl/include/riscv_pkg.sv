@@ -58,4 +58,16 @@ package riscv_pkg;
         BRANCH_BGEU = 3'b111  // Greater/Equal (Unsigned)
     } branch_op_t;
 
+    typedef enum logic [3:0] { // 4 bits to be safe
+        M_NONE,
+        M_MUL,      // Low 64 bits of Signed*Signed
+        M_MULH,     // High 64 bits of Signed*Signed
+        M_MULHSU,   // High 64 bits of Signed*Unsigned
+        M_MULHU,    // High 64 bits of Unsigned*Unsigned
+        M_DIV,      // Signed Divide
+        M_DIVU,     // Unsigned Divide
+        M_REM,      // Signed Remainder
+        M_REMU      // Unsigned Remainder
+    } mul_op_t;
+
 endpackage

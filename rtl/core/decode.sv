@@ -10,6 +10,7 @@ module decode
     output alu_op_t     alu_op_o,
     output lsu_op_t     lsu_op_o,
     output branch_op_t  branch_op_o,
+    output mul_op_t     mul_op_o,
     output logic        reg_write_o,
     output logic        alu_src_o,
     output logic        mem_write_o,
@@ -66,6 +67,7 @@ module decode
         alu_op_o     = ALU_ADD;
         lsu_op_o     = LSU_NONE;
         branch_op_o  = BRANCH_NONE;
+        mul_op_o     = M_NONE;
         reg_write_o  = 1'b0;
         alu_src_o    = 1'b0;
         mem_write_o  = 1'b0;
@@ -94,17 +96,35 @@ module decode
             end
             OP_REG: begin
                 reg_write_o = 1'b1;
-                case (funct3)
-                    3'b000: alu_op_o = (funct7[5]) ? ALU_SUB : ALU_ADD;
-                    3'b001: alu_op_o = ALU_SLL;
-                    3'b010: alu_op_o = ALU_SLT;
-                    3'b011: alu_op_o = ALU_SLTU;
-                    3'b100: alu_op_o = ALU_XOR;
-                    3'b101: alu_op_o = (funct7[5]) ? ALU_SRA : ALU_SRL;
-                    3'b110: alu_op_o = ALU_OR;
-                    3'b111: alu_op_o = ALU_AND;
-                    default: alu_op_o = ALU_ADD;
-                endcase
+                alu_src_o   = 1'b0;
+                
+                // CHECK FOR M-EXTENSION (Funct7 == 0x01)
+                if (funct7 == 7'b0000001) begin
+                    case (funct3)
+                        3'b000: mul_op_o = M_MUL;
+                        3'b001: mul_op_o = M_MULH;
+                        3'b010: mul_op_o = M_MULHSU;
+                        3'b011: mul_op_o = M_MULHU;
+                        3'b100: mul_op_o = M_DIV;
+                        3'b101: mul_op_o = M_DIVU;
+                        3'b110: mul_op_o = M_REM;
+                        3'b111: mul_op_o = M_REMU;
+                        default: mul_op_o = M_NONE;
+                    endcase
+                end else begin
+                    // Standard ALU Ops
+                    case (funct3)
+                        3'b000: alu_op_o = (funct7[5]) ? ALU_SUB : ALU_ADD;
+                        3'b001: alu_op_o = ALU_SLL;
+                        3'b010: alu_op_o = ALU_SLT;
+                        3'b011: alu_op_o = ALU_SLTU;
+                        3'b100: alu_op_o = ALU_XOR;
+                        3'b101: alu_op_o = (funct7[5]) ? ALU_SRA : ALU_SRL;
+                        3'b110: alu_op_o = ALU_OR;
+                        3'b111: alu_op_o = ALU_AND;
+                        default: alu_op_o = ALU_ADD;
+                    endcase
+                end
             end
             OP_LOAD: begin
                 reg_write_o  = 1'b1;
