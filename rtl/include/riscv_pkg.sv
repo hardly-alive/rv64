@@ -33,4 +33,19 @@ package riscv_pkg;
         ALU_OR,   ALU_AND
     } alu_op_t;
 
+    typedef enum logic [3:0] {
+        LSU_NONE,   // Not a memory op
+        LSU_LB,     // Load Byte (Signed)
+        LSU_LH,     // Load Halfword (Signed)
+        LSU_LW,     // Load Word (Signed)
+        LSU_LD,     // Load Doubleword
+        LSU_LBU,    // Load Byte (Unsigned)
+        LSU_LHU,    // Load Halfword (Unsigned)
+        LSU_LWU,    // Load Word (Unsigned)
+        LSU_SB,     // Store Byte
+        LSU_SH,     // Store Halfword
+        LSU_SW,     // Store Word
+        LSU_SD      // Store Doubleword
+    } lsu_op_t;
+
 endpackage

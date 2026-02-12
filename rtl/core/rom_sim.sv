@@ -1,29 +1,74 @@
 module rom_sim (
+    input  logic        clk,
+    
+    // Port A: Instruction Fetch
     input  logic [63:0] addr_i,
-    output logic [31:0] data_o
+    output logic [31:0] data_o,
+
+    // Port B: Data Access
+    input  logic        mem_req_i,
+    input  logic        mem_we_i,
+    input  logic [7:0]  mem_be_i,
+    input  logic [63:0] mem_addr_i,
+    input  logic [63:0] mem_wdata_i,
+    output logic [63:0] mem_rdata_o
 );
+
+    // 4KB Memory
+    logic [7:0] mem [0:4095]; 
+
+    // Internal short addresses (12 bits) to satisfy Verilator
+    logic [11:0] fetch_addr_short;
+    logic [11:0] data_addr_short;
+
+    assign fetch_addr_short = addr_i[11:0];
+    assign data_addr_short  = mem_addr_i[11:0];
+
     /* verilator lint_off UNUSED */
-    logic [63:0] unused_addr;
-    assign unused_addr = addr_i;
+    logic [127:0] dummy_sink;
+    assign dummy_sink = {addr_i, mem_addr_i}; // Tell Verilator we "used" them
     /* verilator lint_on UNUSED */
 
-    logic [31:0] mem [0:1023]; 
-
-
+    // Initialize
     initial begin
-        // Reset everything to NOPs
-        for (int i=0; i<1024; i++) mem[i] = 32'h0000_0013;
-
-        // 1. ADDI x1, x0, 5
-        mem[0] = 32'h00500093; 
-        // 2. ADDI x2, x0, 10
-        mem[1] = 32'h00a00113;
-        // 3. ADD x3, x1, x2  (Should now see 5 + 10)
-        mem[2] = 32'h002081b3;
+        for (int i=0; i<4096; i++) mem[i] = 8'h0;
+        // ADDI x1, x0, 5
+        mem[0] = 8'h93; mem[1] = 8'h00; mem[2] = 8'h50; mem[3] = 8'h00;
+        // SW x1, 100(x0)
+        mem[4] = 8'h23; mem[5] = 8'h22; mem[6] = 8'h10; mem[7] = 8'h06;
+        // LW x2, 100(x0)
+        mem[8] = 8'h03; mem[9] = 8'h21; mem[10]= 8'h40; mem[11]= 8'h06;
+        // ADD x3, x1, x2
+        mem[12]= 8'hb3; mem[13]= 8'h81; mem[14]= 8'h20; mem[15]= 8'h00;
     end
 
-    // 3. Read Logic (Word Aligned)
-    // We ignore the bottom 2 bits of address (addr_i[1:0]) because instructions are 4 bytes wide.
-    assign data_o = mem[addr_i[11:2]];
+    // Port A Read
+    assign data_o = {
+        mem[fetch_addr_short+12'd3], 
+        mem[fetch_addr_short+12'd2], 
+        mem[fetch_addr_short+12'd1], 
+        mem[fetch_addr_short]
+    };
 
+    // Port B Read
+    assign mem_rdata_o = {
+        mem[data_addr_short+12'd7], mem[data_addr_short+12'd6], 
+        mem[data_addr_short+12'd5], mem[data_addr_short+12'd4],
+        mem[data_addr_short+12'd3], mem[data_addr_short+12'd2], 
+        mem[data_addr_short+12'd1], mem[data_addr_short]
+    };
+
+    // Port B Write
+    always @(posedge clk) begin
+        if (mem_req_i && mem_we_i) begin
+            if (mem_be_i[0]) mem[data_addr_short]       <= mem_wdata_i[7:0];
+            if (mem_be_i[1]) mem[data_addr_short+12'd1] <= mem_wdata_i[15:8];
+            if (mem_be_i[2]) mem[data_addr_short+12'd2] <= mem_wdata_i[23:16];
+            if (mem_be_i[3]) mem[data_addr_short+12'd3] <= mem_wdata_i[31:24];
+            if (mem_be_i[4]) mem[data_addr_short+12'd4] <= mem_wdata_i[39:32];
+            if (mem_be_i[5]) mem[data_addr_short+12'd5] <= mem_wdata_i[47:40];
+            if (mem_be_i[6]) mem[data_addr_short+12'd6] <= mem_wdata_i[55:48];
+            if (mem_be_i[7]) mem[data_addr_short+12'd7] <= mem_wdata_i[63:56];
+        end
+    end
 endmodule

@@ -10,8 +10,11 @@ module decode
     
     // To Execute
     output alu_op_t     alu_op_o,
+    output lsu_op_t     lsu_op_o, 
     output logic        reg_write_o,
     output logic        alu_src_o,   // 0=Reg2, 1=Immediate
+    output logic        mem_write_o, // (1 for Stores)
+    output logic        mem_to_reg_o,// (1 for Loads)
     output logic [63:0] imm_o        // The sign-extended immediate
 );
 
@@ -35,22 +38,27 @@ module decode
     // IMMEDIATE GENERATION
     // ------------------------------------
     always_comb begin
-        // Sign-extend 12-bit immediate to 64-bit
-        // {{52{bit}}, 12_bits}
-        if (opcode == OP_IMM || opcode == OP_LOAD) begin
-            imm_o = {{52{instr_i[31]}}, instr_i[31:20]};
-        end else begin
-            imm_o = 64'b0; // Default
-        end
+        case (opcode)
+            OP_IMM, OP_LOAD:  // I-Type
+                imm_o = {{52{instr_i[31]}}, instr_i[31:20]};
+            OP_STORE:         // S-Type (Split immediate)
+                imm_o = {{52{instr_i[31]}}, instr_i[31:25], instr_i[11:7]};
+            default:          
+                imm_o = 64'b0;
+        endcase
     end
 
     // ------------------------------------
     // CONTROL LOGIC
     // ------------------------------------
     always_comb begin
-        alu_op_o    = ALU_ADD;
-        reg_write_o = 1'b0;
-        alu_src_o   = 1'b0; // Default to Register
+        // Defaults
+        alu_op_o     = ALU_ADD;
+        lsu_op_o     = LSU_NONE;
+        reg_write_o  = 1'b0;
+        alu_src_o    = 1'b0;
+        mem_write_o  = 1'b0;
+        mem_to_reg_o = 1'b0;
 
         case (opcode)
             OP_IMM: begin // ADDI, SLTI, etc.
@@ -85,10 +93,49 @@ module decode
                 endcase
             end
             
+            // ---------------------------------
+            // LOADS (I-Type)
+            // ---------------------------------
+            OP_LOAD: begin
+                reg_write_o  = 1'b1;
+                alu_src_o    = 1'b1; // Address = rs1 + imm
+                mem_to_reg_o = 1'b1; // Result comes from Memory
+                alu_op_o     = ALU_ADD; // ALU calculates Address
+                
+                case (funct3)
+                    3'b000: lsu_op_o = LSU_LB;
+                    3'b001: lsu_op_o = LSU_LH;
+                    3'b010: lsu_op_o = LSU_LW;
+                    3'b011: lsu_op_o = LSU_LD;
+                    3'b100: lsu_op_o = LSU_LBU;
+                    3'b101: lsu_op_o = LSU_LHU;
+                    3'b110: lsu_op_o = LSU_LWU;
+                    default: lsu_op_o = LSU_LD;
+                endcase
+            end
+
+            // ---------------------------------
+            // STORES (S-Type)
+            // ---------------------------------
+            OP_STORE: begin
+                reg_write_o = 1'b0;  // Stores don't write to Register File
+                alu_src_o   = 1'b1;  // Address = rs1 + imm
+                mem_write_o = 1'b1;  // Write to Memory
+                alu_op_o    = ALU_ADD; // ALU calculates Address
+
+                case (funct3)
+                    3'b000: lsu_op_o = LSU_SB;
+                    3'b001: lsu_op_o = LSU_SH;
+                    3'b010: lsu_op_o = LSU_SW;
+                    3'b011: lsu_op_o = LSU_SD;
+                    default: lsu_op_o = LSU_SD;
+                endcase
+            end
+
             default: begin
-                alu_op_o = ALU_ADD;
                 reg_write_o = 1'b0;
             end
         endcase
     end
+
 endmodule
