@@ -7,7 +7,6 @@ module core_top
     output logic [63:0] imem_addr,
     input  logic [31:0] imem_rdata,
     
-    // Data Memory Interface (Now Active!)
     output logic [63:0] dmem_addr,
     output logic [63:0] dmem_wdata,
     output logic        dmem_wen,
@@ -31,53 +30,62 @@ module core_top
     logic [4:0]  dec_rd;
     logic [63:0] dec_imm;
     alu_op_t     dec_alu_op;
-    lsu_op_t     dec_lsu_op;     // NEW
+    lsu_op_t     dec_lsu_op;
+    branch_op_t  dec_branch_op;  // NEW
     logic        dec_reg_write;
     logic        dec_alu_src;
-    logic        dec_mem_write;  // NEW
-    logic        dec_mem_to_reg; // NEW
+    logic        dec_mem_write;
+    logic        dec_mem_to_reg;
+    logic        dec_is_jump;    // NEW
+    logic        dec_is_jalr;    // NEW
 
     // Regfile Outputs
     logic [63:0] reg_rs1_data;
     logic [63:0] reg_rs2_data;
 
     // ID/EX Pipeline Signals
+    logic [63:0] ex_pc;          // NEW
     logic [63:0] ex_rs1_data;
     logic [63:0] ex_rs2_data;
     logic [63:0] ex_imm;
     logic [4:0]  ex_rd_addr;
     alu_op_t     ex_alu_op;
-    lsu_op_t     ex_lsu_op;      // NEW
+    lsu_op_t     ex_lsu_op;
+    branch_op_t  ex_branch_op;   // NEW
     logic        ex_reg_write;
     logic        ex_alu_src;
-    logic        ex_mem_write;   // NEW
-    logic        ex_mem_to_reg;  // NEW
+    logic        ex_mem_write;
+    logic        ex_mem_to_reg;
+    logic        ex_is_jump;     // NEW
+    logic        ex_is_jalr;     // NEW
 
-    // ALU Signals
+    // ALU & Branch Signals
     logic [4:0]  ex_rs1_addr;
     logic [4:0]  ex_rs2_addr;
     logic [63:0] alu_result;
+    logic [63:0] branch_target;  // NEW
+    logic        branch_taken;   // NEW
+    logic        pc_redirect;    // NEW (Valid Jump or Branch)
 
     // Forwarding Signals
     logic [63:0] alu_operand_a;
     logic [63:0] alu_operand_b_raw;
-    logic [63:0] alu_operand_b;
 
     // EX/MEM Pipeline Signals
     logic [63:0] mem_alu_result;
-    logic [63:0] mem_store_data; // Values to be stored
+    logic [63:0] mem_store_data;
     logic [4:0]  mem_rd_addr;
     logic        mem_reg_write;
-    lsu_op_t     mem_lsu_op;     // NEW
-    logic        mem_mem_write;  // NEW
-    logic        mem_mem_to_reg; // NEW
+    lsu_op_t     mem_lsu_op;
+    logic        mem_mem_write;
+    logic        mem_mem_to_reg;
 
-    // LSU Signals (Memory Stage)
-    logic [63:0] lsu_rdata;      // Data from RAM
-    logic [63:0] lsu_final_data; // Data formatted by LSU (Load Result)
-    logic        mem_req;        // Request to RAM
-    logic        mem_we;         // Write Enable to RAM
-    logic [7:0]  mem_be;         // Byte Enable
+    // LSU Signals
+    logic [63:0] lsu_rdata;
+    logic [63:0] lsu_final_data;
+    logic        mem_req;
+    logic        mem_we;
+    logic [7:0]  mem_be;
 
     // WB Stage Signals
     logic [63:0] wb_alu_result;
@@ -93,29 +101,22 @@ module core_top
     fetch u_fetch (
         .clk             (clk),
         .rst_n           (rst_n),
-        .branch_target_i (64'b0),
-        .branch_taken_i  (1'b0),
+        .branch_target_i (branch_target), // Jump to here
+        .branch_taken_i  (pc_redirect),   // If this is 1
         .imem_addr_o     (fetch_addr),
         .pc_out_o        (current_pc)
     );
 
-    // Using rom_sim as Unified Memory for simplicity
-    // Port A: Instruction Fetch
-    // Port B: Data Access
     rom_sim u_ram (
         .clk         (clk),
-        
-        // Port A (Instructions)
         .addr_i      (fetch_addr),
         .data_o      (raw_instr),
-
-        // Port B (Data)
         .mem_req_i   (mem_req),
         .mem_we_i    (mem_we),
         .mem_be_i    (mem_be),
-        .mem_addr_i  (mem_alu_result), // Address comes from ALU
-        .mem_wdata_i (dmem_wdata),     // Data comes from LSU
-        .mem_rdata_o (lsu_rdata)       // Raw data from RAM
+        .mem_addr_i  (mem_alu_result),
+        .mem_wdata_i (dmem_wdata),
+        .mem_rdata_o (lsu_rdata)
     );
 
     // ---------------------------------------------------------
@@ -125,7 +126,7 @@ module core_top
         .clk      (clk),
         .rst_n    (rst_n),
         .stall_i  (1'b0),
-        .flush_i  (1'b0),
+        .flush_i  (pc_redirect), // FLUSH if we jump (Kill fetched instr)
         .pc_i     (current_pc),
         .instr_i  (raw_instr),
         .pc_o     (id_pc),
@@ -136,70 +137,77 @@ module core_top
     // STAGE 2: DECODE
     // ---------------------------------------------------------
     decode u_decode (
-        .instr_i    (id_instr),
-        .rs1_addr_o (dec_rs1),
-        .rs2_addr_o (dec_rs2),
-        .rd_addr_o  (dec_rd),
+        .instr_i      (id_instr),
+        .rs1_addr_o   (dec_rs1),
+        .rs2_addr_o   (dec_rs2),
+        .rd_addr_o    (dec_rd),
         
-        .alu_op_o   (dec_alu_op),
-        .lsu_op_o   (dec_lsu_op),      // NEW
-        .reg_write_o(dec_reg_write),
-        .alu_src_o  (dec_alu_src),
-        .mem_write_o(dec_mem_write),   // NEW
-        .mem_to_reg_o(dec_mem_to_reg), // NEW
-        .imm_o      (dec_imm)
+        .alu_op_o     (dec_alu_op),
+        .lsu_op_o     (dec_lsu_op),
+        .branch_op_o  (dec_branch_op),  // NEW
+        .reg_write_o  (dec_reg_write),
+        .alu_src_o    (dec_alu_src),
+        .mem_write_o  (dec_mem_write),
+        .mem_to_reg_o (dec_mem_to_reg),
+        .is_jump_o    (dec_is_jump),    // NEW
+        .is_jalr_o    (dec_is_jalr),    // NEW
+        .imm_o        (dec_imm)
     );
 
     // ---------------------------------------------------------
     // PIPELINE: ID -> EX
     // ---------------------------------------------------------
     id_ex_reg u_id_ex (
-        .clk         (clk),
-        .rst_n       (rst_n),
-        .rs1_data_i  (reg_rs1_data),
-        .rs2_data_i  (reg_rs2_data),
-        .imm_i       (dec_imm),
-        .rs1_addr_i  (dec_rs1),   
-        .rs2_addr_i  (dec_rs2),  
-        .rd_addr_i   (dec_rd),
-        .alu_op_i    (dec_alu_op),
-        .lsu_op_i    (dec_lsu_op),     // NEW
-        .reg_write_i (dec_reg_write),
-        .alu_src_i   (dec_alu_src),
-        .mem_write_i (dec_mem_write),  // NEW
-        .mem_to_reg_i(dec_mem_to_reg), // NEW
+        .clk          (clk),
+        .rst_n        (rst_n),
+        .flush_i      (pc_redirect),    // FLUSH if we jump
         
-        .rs1_data_o  (ex_rs1_data),
-        .rs2_data_o  (ex_rs2_data),
-        .imm_o       (ex_imm),
-        .rs1_addr_o  (ex_rs1_addr), 
-        .rs2_addr_o  (ex_rs2_addr), 
-        .rd_addr_o   (ex_rd_addr),
-        .alu_op_o    (ex_alu_op),
-        .lsu_op_o    (ex_lsu_op),      // NEW
-        .reg_write_o (ex_reg_write),
-        .alu_src_o   (ex_alu_src),
-        .mem_write_o (ex_mem_write),   // NEW
-        .mem_to_reg_o(ex_mem_to_reg)   // NEW
+        .pc_i         (id_pc),          // Pass PC
+        .rs1_data_i   (reg_rs1_data),
+        .rs2_data_i   (reg_rs2_data),
+        .imm_i        (dec_imm),
+        .rs1_addr_i   (dec_rs1),   
+        .rs2_addr_i   (dec_rs2),  
+        .rd_addr_i    (dec_rd),
+        .alu_op_i     (dec_alu_op),
+        .lsu_op_i     (dec_lsu_op),
+        .branch_op_i  (dec_branch_op),  // NEW
+        .reg_write_i  (dec_reg_write),
+        .alu_src_i    (dec_alu_src),
+        .mem_write_i  (dec_mem_write),
+        .mem_to_reg_i (dec_mem_to_reg),
+        .is_jump_i    (dec_is_jump),    // NEW
+        .is_jalr_i    (dec_is_jalr),    // NEW
+        
+        .pc_o         (ex_pc),          // NEW
+        .rs1_data_o   (ex_rs1_data),
+        .rs2_data_o   (ex_rs2_data),
+        .imm_o        (ex_imm),
+        .rs1_addr_o   (ex_rs1_addr), 
+        .rs2_addr_o   (ex_rs2_addr), 
+        .rd_addr_o    (ex_rd_addr),
+        .alu_op_o     (ex_alu_op),
+        .lsu_op_o     (ex_lsu_op),
+        .branch_op_o  (ex_branch_op),   // NEW
+        .reg_write_o  (ex_reg_write),
+        .alu_src_o    (ex_alu_src),
+        .mem_write_o  (ex_mem_write),
+        .mem_to_reg_o (ex_mem_to_reg),
+        .is_jump_o    (ex_is_jump),     // NEW
+        .is_jalr_o    (ex_is_jalr)      // NEW
     );
 
     // ---------------------------------------------------------
-    // FORWARDING LOGIC (Fixed for Load-Use)
+    // FORWARDING LOGIC
     // ---------------------------------------------------------
     // Operand A
     always_comb begin
         if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs1_addr)) begin
-            // HAZARD: Data in MEM stage
-            if (mem_mem_to_reg) begin
-                alu_operand_a = lsu_final_data; // Forward MEMORY DATA (for Loads)
-            end else begin
-                alu_operand_a = mem_alu_result; // Forward ALU RESULT (for Arithmetic)
-            end
+            if (mem_mem_to_reg) alu_operand_a = lsu_final_data;
+            else                alu_operand_a = mem_alu_result;
         end else if (wb_reg_write && (wb_rd_addr != 0) && (wb_rd_addr == ex_rs1_addr)) begin
-            // HAZARD: Data in WB stage
-            alu_operand_a = wb_final_data;      // Forward WB Result
+            alu_operand_a = wb_final_data;
         end else begin
-            // No Hazard
             alu_operand_a = ex_rs1_data;
         end
     end
@@ -207,11 +215,8 @@ module core_top
     // Operand B
     always_comb begin
         if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs2_addr)) begin
-            if (mem_mem_to_reg) begin
-                alu_operand_b_raw = lsu_final_data; // Forward MEMORY DATA
-            end else begin
-                alu_operand_b_raw = mem_alu_result; // Forward ALU RESULT
-            end
+            if (mem_mem_to_reg) alu_operand_b_raw = lsu_final_data;
+            else                alu_operand_b_raw = mem_alu_result;
         end else if (wb_reg_write && (wb_rd_addr != 0) && (wb_rd_addr == ex_rs2_addr)) begin
             alu_operand_b_raw = wb_final_data;
         end else begin
@@ -220,14 +225,45 @@ module core_top
     end
 
     // ---------------------------------------------------------
-    // STAGE 3: EXECUTE
+    // STAGE 3: EXECUTE & BRANCH
     // ---------------------------------------------------------
-    assign alu_operand_b = (ex_alu_src) ? ex_imm : alu_operand_b_raw;
+    
+    // 1. Branch Comparison Unit
+    branch_comp u_branch (
+        .branch_op_i    (ex_branch_op),
+        .op_a_i         (alu_operand_a),
+        .op_b_i         (alu_operand_b_raw), // Compare against RAW reg value
+        .branch_taken_o (branch_taken)
+    );
+
+    // 2. Branch Target Calculation
+    // For JALR: Target = rs1 + imm
+    // For Branch/JAL: Target = PC + imm
+    assign branch_target = (ex_is_jalr) ? (alu_operand_a + ex_imm) : (ex_pc + ex_imm);
+
+    // 3. PC Redirect Logic (Take Branch OR Jump)
+    assign pc_redirect = branch_taken || ex_is_jump;
+
+    // 4. ALU Inputs
+    // For JAL/JALR, we want to save PC+4 into rd.
+    // So we trick the ALU: A=PC, B=4, OP=ADD
+    logic [63:0] alu_final_a;
+    logic [63:0] alu_final_b;
+
+    always_comb begin
+        if (ex_is_jump) begin
+            alu_final_a = ex_pc;
+            alu_final_b = 64'd4;
+        end else begin
+            alu_final_a = alu_operand_a;
+            alu_final_b = (ex_alu_src) ? ex_imm : alu_operand_b_raw;
+        end
+    end
 
     alu u_alu (
         .alu_op_i (ex_alu_op),
-        .op_a_i   (alu_operand_a),
-        .op_b_i   (alu_operand_b),
+        .op_a_i   (alu_final_a),
+        .op_b_i   (alu_final_b),
         .result_o (alu_result)
     );
 
@@ -238,20 +274,20 @@ module core_top
         .clk          (clk),
         .rst_n        (rst_n),
         .alu_result_i (alu_result),
-        .store_data_i (alu_operand_b_raw), // <--- CRITICAL: Use Forwarded RS2 for Stores
+        .store_data_i (alu_operand_b_raw), 
         .rd_addr_i    (ex_rd_addr),
         .reg_write_i  (ex_reg_write),
-        .lsu_op_i     (ex_lsu_op),     // NEW
-        .mem_write_i  (ex_mem_write),  // NEW
-        .mem_to_reg_i (ex_mem_to_reg), // NEW
+        .lsu_op_i     (ex_lsu_op),
+        .mem_write_i  (ex_mem_write),
+        .mem_to_reg_i (ex_mem_to_reg),
         
         .alu_result_o (mem_alu_result),
         .store_data_o (mem_store_data),
         .rd_addr_o    (mem_rd_addr),
         .reg_write_o  (mem_reg_write),
-        .lsu_op_o     (mem_lsu_op),    // NEW
-        .mem_write_o  (mem_mem_write), // NEW
-        .mem_to_reg_o (mem_mem_to_reg) // NEW
+        .lsu_op_o     (mem_lsu_op),
+        .mem_write_o  (mem_mem_write),
+        .mem_to_reg_o (mem_mem_to_reg)
     );
 
     // ---------------------------------------------------------
@@ -259,17 +295,15 @@ module core_top
     // ---------------------------------------------------------
     lsu u_lsu (
         .lsu_op_i     (mem_lsu_op),
-        .addr_i       (mem_alu_result), // Calculated Address
-        .store_data_i (mem_store_data), // Data to store
-        .load_data_i  (lsu_rdata),      // Raw data from RAM
-
+        .addr_i       (mem_alu_result),
+        .store_data_i (mem_store_data),
+        .load_data_i  (lsu_rdata),
         .mem_req_o    (mem_req),
         .mem_we_o     (mem_we),
-        .mem_addr_o   (dmem_addr),      // To Top Level (debug)
-        .mem_wdata_o  (dmem_wdata),     // To Top Level / RAM
-        .mem_be_o     (mem_be),         // To RAM
-
-        .result_o     (lsu_final_data)  // Formatted Load Data
+        .mem_addr_o   (dmem_addr),
+        .mem_wdata_o  (dmem_wdata),
+        .mem_be_o     (mem_be),
+        .result_o     (lsu_final_data)
     );
 
     // ---------------------------------------------------------
@@ -278,12 +312,11 @@ module core_top
     mem_wb_reg u_mem_wb (
         .clk          (clk),
         .rst_n        (rst_n),
-        .alu_result_i (mem_alu_result), // Pass ALU result (for arithmetic ops)
-        .mem_data_i   (lsu_final_data), // Pass Load result
+        .alu_result_i (mem_alu_result),
+        .mem_data_i   (lsu_final_data),
         .rd_addr_i    (mem_rd_addr),
         .reg_write_i  (mem_reg_write),
         .mem_to_reg_i (mem_mem_to_reg),
-
         .alu_result_o (wb_alu_result),
         .mem_data_o   (wb_mem_data),
         .rd_addr_o    (wb_rd_addr),
@@ -312,14 +345,14 @@ module core_top
     // OUTPUTS & UNUSED
     // ---------------------------------------------------------
     assign imem_addr = fetch_addr;
-    assign dmem_wen  = mem_we; // Output write enable to top level
+    assign dmem_wen  = mem_we;
 
     /* verilator lint_off UNUSED */
     logic [31:0] unused_imem;
     logic [63:0] unused_dmem;
     logic [63:0] unused_pc, unused_id_pc;
-    logic unused_mem_write;         // Add this
-    assign unused_mem_write = mem_mem_write; // Add this
+    logic unused_mem_write;
+    assign unused_mem_write = mem_mem_write;
     assign unused_imem = imem_rdata;
     assign unused_dmem = dmem_rdata;
     assign unused_pc   = current_pc;

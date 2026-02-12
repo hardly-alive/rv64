@@ -3,19 +3,21 @@ module decode
 (
     input  logic [31:0] instr_i,
 
-    // To Regfile
     output logic [4:0]  rs1_addr_o,
     output logic [4:0]  rs2_addr_o,
     output logic [4:0]  rd_addr_o,
     
-    // To Execute
+    // Control Signals
     output alu_op_t     alu_op_o,
-    output lsu_op_t     lsu_op_o, 
+    output lsu_op_t     lsu_op_o,
+    output branch_op_t  branch_op_o, // NEW
     output logic        reg_write_o,
-    output logic        alu_src_o,   // 0=Reg2, 1=Immediate
-    output logic        mem_write_o, // (1 for Stores)
-    output logic        mem_to_reg_o,// (1 for Loads)
-    output logic [63:0] imm_o        // The sign-extended immediate
+    output logic        alu_src_o,
+    output logic        mem_write_o,
+    output logic        mem_to_reg_o,
+    output logic        is_jump_o,   // NEW (1 for JAL/JALR)
+    output logic        is_jalr_o,   // NEW (1 for JALR specifically)
+    output logic [63:0] imm_o
 );
 
     opcode_t    opcode;
@@ -39,10 +41,18 @@ module decode
     // ------------------------------------
     always_comb begin
         case (opcode)
-            OP_IMM, OP_LOAD:  // I-Type
+            OP_IMM, OP_LOAD, OP_JALR: // I-Type
                 imm_o = {{52{instr_i[31]}}, instr_i[31:20]};
-            OP_STORE:         // S-Type (Split immediate)
+                
+            OP_STORE: // S-Type
                 imm_o = {{52{instr_i[31]}}, instr_i[31:25], instr_i[11:7]};
+                
+            OP_BRANCH: // B-Type (Scrambled!)
+                imm_o = {{51{instr_i[31]}}, instr_i[31], instr_i[7], instr_i[30:25], instr_i[11:8], 1'b0};
+                
+            OP_JAL: // J-Type (Scrambled!)
+                imm_o = {{43{instr_i[31]}}, instr_i[31], instr_i[19:12], instr_i[20], instr_i[30:21], 1'b0};
+                
             default:          
                 imm_o = 64'b0;
         endcase
@@ -55,15 +65,18 @@ module decode
         // Defaults
         alu_op_o     = ALU_ADD;
         lsu_op_o     = LSU_NONE;
+        branch_op_o  = BRANCH_NONE; // Default
         reg_write_o  = 1'b0;
         alu_src_o    = 1'b0;
         mem_write_o  = 1'b0;
         mem_to_reg_o = 1'b0;
+        is_jump_o    = 1'b0;
+        is_jalr_o    = 1'b0;
 
         case (opcode)
-            OP_IMM: begin // ADDI, SLTI, etc.
+            OP_IMM: begin
                 reg_write_o = 1'b1;
-                alu_src_o   = 1'b1; // Use Immediate!
+                alu_src_o   = 1'b1;
                 case (funct3)
                     3'b000: alu_op_o = ALU_ADD;
                     3'b010: alu_op_o = ALU_SLT;
@@ -77,9 +90,9 @@ module decode
                 endcase
             end
 
-            OP_REG: begin // ADD, SUB, etc.
+            OP_REG: begin
                 reg_write_o = 1'b1;
-                alu_src_o   = 1'b0; // Use Register!
+                alu_src_o   = 1'b0;
                 case (funct3)
                     3'b000: alu_op_o = (funct7[5]) ? ALU_SUB : ALU_ADD;
                     3'b001: alu_op_o = ALU_SLL;
@@ -92,16 +105,12 @@ module decode
                     default: alu_op_o = ALU_ADD;
                 endcase
             end
-            
-            // ---------------------------------
-            // LOADS (I-Type)
-            // ---------------------------------
+
             OP_LOAD: begin
                 reg_write_o  = 1'b1;
-                alu_src_o    = 1'b1; // Address = rs1 + imm
-                mem_to_reg_o = 1'b1; // Result comes from Memory
-                alu_op_o     = ALU_ADD; // ALU calculates Address
-                
+                alu_src_o    = 1'b1;
+                mem_to_reg_o = 1'b1;
+                alu_op_o     = ALU_ADD;
                 case (funct3)
                     3'b000: lsu_op_o = LSU_LB;
                     3'b001: lsu_op_o = LSU_LH;
@@ -114,15 +123,11 @@ module decode
                 endcase
             end
 
-            // ---------------------------------
-            // STORES (S-Type)
-            // ---------------------------------
             OP_STORE: begin
-                reg_write_o = 1'b0;  // Stores don't write to Register File
-                alu_src_o   = 1'b1;  // Address = rs1 + imm
-                mem_write_o = 1'b1;  // Write to Memory
-                alu_op_o    = ALU_ADD; // ALU calculates Address
-
+                reg_write_o = 1'b0;
+                alu_src_o   = 1'b1;
+                mem_write_o = 1'b1;
+                alu_op_o    = ALU_ADD;
                 case (funct3)
                     3'b000: lsu_op_o = LSU_SB;
                     3'b001: lsu_op_o = LSU_SH;
@@ -132,10 +137,43 @@ module decode
                 endcase
             end
 
+            // ---------------------------------
+            // BRANCHES (B-Type)
+            // ---------------------------------
+            OP_BRANCH: begin
+                // No reg write, no memory write
+                // Just pass branch op to Execute stage
+                branch_op_o = branch_op_t'(funct3);
+                // We don't use ALU for comparison (we use Branch Unit)
+                // But we need ALU to compute Target? No, usually separate adder.
+                // We'll calculate Target in Execute stage using PC + Imm.
+            end
+
+            // ---------------------------------
+            // JAL (J-Type)
+            // ---------------------------------
+            OP_JAL: begin
+                reg_write_o = 1'b1; // Writes PC+4 to rd
+                is_jump_o   = 1'b1; // Unconditional Jump
+                // JAL stores PC+4. 
+                // We can handle this by passing PC to ALU?
+                // Or handle it separately. For now, mark as Jump.
+            end
+
+            // ---------------------------------
+            // JALR (I-Type)
+            // ---------------------------------
+            OP_JALR: begin
+                reg_write_o = 1'b1; // Writes PC+4 to rd
+                is_jump_o   = 1'b1;
+                is_jalr_o   = 1'b1; // Target = rs1 + imm (not PC + imm)
+                alu_src_o   = 1'b1; // Use Imm
+                alu_op_o    = ALU_ADD; // ALU calculates Target Address
+            end
+
             default: begin
                 reg_write_o = 1'b0;
             end
         endcase
     end
-
 endmodule

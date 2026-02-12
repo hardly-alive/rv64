@@ -48,4 +48,14 @@ package riscv_pkg;
         LSU_SD      // Store Doubleword
     } lsu_op_t;
 
+    typedef enum logic [2:0] {
+        BRANCH_NONE = 3'b010, // Default (No Branch) - mapped to safe value
+        BRANCH_BEQ  = 3'b000, // Equal
+        BRANCH_BNE  = 3'b001, // Not Equal
+        BRANCH_BLT  = 3'b100, // Less Than (Signed)
+        BRANCH_BGE  = 3'b101, // Greater/Equal (Signed)
+        BRANCH_BLTU = 3'b110, // Less Than (Unsigned)
+        BRANCH_BGEU = 3'b111  // Greater/Equal (Unsigned)
+    } branch_op_t;
+
 endpackage
