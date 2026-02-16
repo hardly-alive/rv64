@@ -57,6 +57,7 @@ module core_top
 
     // ID/EX Pipeline Signals
     logic [63:0] ex_pc;
+    logic [31:0] ex_instr;
     logic [63:0] ex_rs1_data;
     logic [63:0] ex_rs2_data;
     logic [63:0] ex_imm;
@@ -90,6 +91,8 @@ module core_top
     logic [63:0] alu_operand_b_raw;
 
     // EX/MEM Signals
+    logic [63:0] mem_pc;    
+    logic [31:0] mem_instr; 
     logic [63:0] mem_alu_result;
     logic [63:0] mem_store_data;
     logic [4:0]  mem_rd_addr;
@@ -105,6 +108,8 @@ module core_top
     logic        mem_req;
     logic        mem_we;
     logic [7:0]  mem_be;
+    logic [63:0] wb_pc;
+    logic [31:0] wb_instr;     
     logic [63:0] wb_alu_result;
     logic [63:0] wb_mem_data;
     logic [63:0] wb_final_data;
@@ -199,55 +204,57 @@ module core_top
         .clk          (clk),
         .rst_n        (rst_n),
         .flush_i      (pc_redirect || flush_ex),
-        .stall_i      (stall_global),  // NEW: Freeze EX input on Stall
-        
+        .stall_i      (stall_global),
+
         .pc_i         (id_pc),
+        .instr_i      (id_instr),      //new:
         .rs1_data_i   (reg_rs1_data),
         .rs2_data_i   (reg_rs2_data),
         .imm_i        (dec_imm),
-        .rs1_addr_i   (dec_rs1),   
-        .rs2_addr_i   (dec_rs2),  
+        .rs1_addr_i   (dec_rs1),
+        .rs2_addr_i   (dec_rs2),
         .rd_addr_i    (dec_rd),
         .alu_op_i     (dec_alu_op),
         .lsu_op_i     (dec_lsu_op),
         .branch_op_i  (dec_branch_op),
-        .mul_op_i     (dec_mul_op),    // NEW
+        .mul_op_i     (dec_mul_op),
         .reg_write_i  (dec_reg_write),
         .alu_src_i    (dec_alu_src),
         .mem_write_i  (dec_mem_write),
-        .mem_read_i   (dec_mem_read),    
+        .mem_read_i   (dec_mem_read),
         .mem_to_reg_i (dec_mem_to_reg),
         .is_jump_i    (dec_is_jump),
         .is_jalr_i    (dec_is_jalr),
-        .is_lui_i     (dec_is_lui),      
-        .is_auipc_i   (dec_is_auipc),    
-        
+        .is_lui_i     (dec_is_lui),
+        .is_auipc_i   (dec_is_auipc),
+
         .pc_o         (ex_pc),
+        .instr_o      (ex_instr),
         .rs1_data_o   (ex_rs1_data),
         .rs2_data_o   (ex_rs2_data),
         .imm_o        (ex_imm),
-        .rs1_addr_o   (ex_rs1_addr), 
-        .rs2_addr_o   (ex_rs2_addr), 
+        .rs1_addr_o   (ex_rs1_addr),
+        .rs2_addr_o   (ex_rs2_addr),
         .rd_addr_o    (ex_rd_addr),
         .alu_op_o     (ex_alu_op),
         .lsu_op_o     (ex_lsu_op),
         .branch_op_o  (ex_branch_op),
-        .mul_op_o     (ex_mul_op),     // NEW
+        .mul_op_o     (ex_mul_op),
         .reg_write_o  (ex_reg_write),
         .alu_src_o    (ex_alu_src),
         .mem_write_o  (ex_mem_write),
-        .mem_read_o   (ex_mem_read),    
+        .mem_read_o   (ex_mem_read),
         .mem_to_reg_o (ex_mem_to_reg),
         .is_jump_o    (ex_is_jump),
         .is_jalr_o    (ex_is_jalr),
-        .is_lui_o     (ex_is_lui),      
-        .is_auipc_o   (ex_is_auipc)     
+        .is_lui_o     (ex_is_lui),
+        .is_auipc_o   (ex_is_auipc)
     );
+
 
     // ---------------------------------------------------------
     // FORWARDING & OPERANDS
     // ---------------------------------------------------------
-    // Same as before...
     always_comb begin
         if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs1_addr)) begin
              if (mem_mem_to_reg) alu_operand_a = lsu_final_data;
@@ -331,17 +338,23 @@ module core_top
     ex_mem_reg u_ex_mem (
         .clk          (clk),
         .rst_n        (rst_n),
-        .flush_i      (flush_mem), // Flush if Stalled for MUL
+        .flush_i      (flush_mem),
 
-        .alu_result_i (final_ex_result), // Pass Muxed Result
-        .store_data_i (alu_operand_b_raw), 
+        .pc_i         (ex_pc),        //new:
+        .instr_i      (ex_instr),     //new:
+
+        .alu_result_i (final_ex_result),
+        .store_data_i (alu_operand_b_raw),
         .rd_addr_i    (ex_rd_addr),
         .reg_write_i  (ex_reg_write),
         .lsu_op_i     (ex_lsu_op),
         .mem_write_i  (ex_mem_write),
         .mem_read_i   (ex_mem_read),
         .mem_to_reg_i (ex_mem_to_reg),
-        
+
+        .pc_o         (mem_pc),       //new:
+        .instr_o      (mem_instr),    //new:
+
         .alu_result_o (mem_alu_result),
         .store_data_o (mem_store_data),
         .rd_addr_o    (mem_rd_addr),
@@ -351,6 +364,7 @@ module core_top
         .mem_read_o   (mem_mem_read),
         .mem_to_reg_o (mem_mem_to_reg)
     );
+
 
     // ---------------------------------------------------------
     // STAGE 4: MEMORY (LSU)
@@ -376,17 +390,26 @@ module core_top
     mem_wb_reg u_mem_wb (
         .clk          (clk),
         .rst_n        (rst_n),
+
+        .pc_i         (mem_pc),        //new:
+        .instr_i      (mem_instr),     //new:
+
         .alu_result_i (mem_alu_result),
         .mem_data_i   (lsu_final_data),
         .rd_addr_i    (mem_rd_addr),
         .reg_write_i  (mem_reg_write),
         .mem_to_reg_i (mem_mem_to_reg),
+
+        .pc_o         (wb_pc),         //new:
+        .instr_o      (wb_instr),      //new:
+
         .alu_result_o (wb_alu_result),
         .mem_data_o   (wb_mem_data),
         .rd_addr_o    (wb_rd_addr),
         .reg_write_o  (wb_reg_write),
         .mem_to_reg_o (wb_mem_to_reg)
     );
+
 
     // ---------------------------------------------------------
     // STAGE 5: WRITEBACK
@@ -404,6 +427,20 @@ module core_top
         .rd_data_i  (wb_final_data),
         .rd_wen_i   (wb_reg_write)
     );
+
+    // ---------------------------------------------------------
+    // Tracer
+    // ---------------------------------------------------------
+    tracer u_tracer (
+        .clk         (clk),
+        .valid_wb_i  (wb_reg_write), 
+        .pc_i        (wb_pc),          
+        .instr_i     (wb_instr),      
+        .reg_write_i (wb_reg_write),
+        .rd_addr_i   (wb_rd_addr),
+        .rd_data_i   (wb_final_data)
+    );
+
 
     // ---------------------------------------------------------
     // OUTPUTS & UNUSED
