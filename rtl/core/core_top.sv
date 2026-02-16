@@ -96,6 +96,7 @@ module core_top
     logic        mem_reg_write;
     lsu_op_t     mem_lsu_op;
     logic        mem_mem_write;
+    logic        mem_mem_read;
     logic        mem_mem_to_reg;
     
     // LSU/WB Signals
@@ -280,9 +281,8 @@ module core_top
         .op_b_i         (alu_operand_b_raw),
         .branch_taken_o (branch_taken)
     );
-
-    assign branch_target = (ex_is_jalr) ? (alu_operand_a + ex_imm) : (ex_pc + ex_imm);
-    assign pc_redirect = branch_taken || ex_is_jump;
+    assign branch_target = ex_is_jalr ? ((alu_operand_a + ex_imm) & ~64'd1) : (ex_pc + ex_imm);
+    assign pc_redirect = branch_taken || ex_is_jump || ex_is_jalr;
 
     // ALU Input Muxing
     logic [63:0] alu_final_a;
@@ -339,6 +339,7 @@ module core_top
         .reg_write_i  (ex_reg_write),
         .lsu_op_i     (ex_lsu_op),
         .mem_write_i  (ex_mem_write),
+        .mem_read_i   (ex_mem_read),
         .mem_to_reg_i (ex_mem_to_reg),
         
         .alu_result_o (mem_alu_result),
@@ -347,6 +348,7 @@ module core_top
         .reg_write_o  (mem_reg_write),
         .lsu_op_o     (mem_lsu_op),
         .mem_write_o  (mem_mem_write),
+        .mem_read_o   (mem_mem_read),
         .mem_to_reg_o (mem_mem_to_reg)
     );
 
@@ -354,6 +356,8 @@ module core_top
     // STAGE 4: MEMORY (LSU)
     // ---------------------------------------------------------
     lsu u_lsu (
+        .mem_read_i   (mem_mem_read),
+        .mem_write_i  (mem_mem_write),
         .lsu_op_i     (mem_lsu_op),
         .addr_i       (mem_alu_result),
         .store_data_i (mem_store_data),

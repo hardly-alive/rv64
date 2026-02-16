@@ -7,3 +7,4 @@ _start:
     
 loop:
     j loop              # Infinite loop if main returns
+    
