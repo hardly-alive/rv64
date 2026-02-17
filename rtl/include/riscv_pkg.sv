@@ -18,19 +18,28 @@ package riscv_pkg;
         OP_LOAD   = 7'b0000011,
         OP_STORE  = 7'b0100011,
         OP_IMM    = 7'b0010011, 
+        OP_IMM_32 = 7'b0011011,
         OP_REG    = 7'b0110011,
-        OP_SYSTEM = 7'b1110011 
+        OP_REG_32 = 7'b0111011,
+        OP_FENCE =  7'b0001111,
+        OP_SYSTEM = 7'b1110011
     } opcode_t;
 
     // ------------------------------------
     // 3. ALU Operations
     // ------------------------------------
-    typedef enum logic [3:0] {
-        ALU_ADD,  ALU_SUB,
-        ALU_SLL,  ALU_SLT,
-        ALU_SLTU, ALU_XOR,
-        ALU_SRL,  ALU_SRA,
-        ALU_OR,   ALU_AND
+    typedef enum logic [4:0] {
+        //Arithmetic
+        ALU_ADD,  ALU_ADDW,  
+        ALU_SUB,  ALU_SUBW,
+        //Logical
+        ALU_OR,   ALU_AND, ALU_XOR,
+        //Comparison
+        ALU_SLT,  ALU_SLTU, 
+        //Shift
+        ALU_SLL,  ALU_SLLW, 
+        ALU_SRL,  ALU_SRLW, 
+        ALU_SRA,  ALU_SRAW  
     } alu_op_t;
 
     typedef enum logic [3:0] {
@@ -64,10 +73,16 @@ package riscv_pkg;
         M_MULH,     // High 64 bits of Signed*Signed
         M_MULHSU,   // High 64 bits of Signed*Unsigned
         M_MULHU,    // High 64 bits of Unsigned*Unsigned
+        M_MULW,
+        
         M_DIV,      // Signed Divide
         M_DIVU,     // Unsigned Divide
         M_REM,      // Signed Remainder
-        M_REMU      // Unsigned Remainder
+        M_REMU,      // Unsigned Remainder
+        M_DIVW,
+        M_DIVUW,
+        M_REMW,
+        M_REMUW
     } mul_op_t;
 
 endpackage

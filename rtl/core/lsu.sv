@@ -26,7 +26,6 @@ module lsu
     assign mem_addr_o  = addr_i;
     assign addr_offset = addr_i[2:0];
 
-    // 1. MEMORY CONTROL (Explicit Gating)
     // Only request memory if the pipeline explicitly says so
     assign mem_req_o = mem_read_i || mem_write_i;
     assign mem_we_o  = mem_write_i; // Write enable comes directly from pipeline

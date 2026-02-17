@@ -6,20 +6,23 @@ module decode
     output logic [4:0]  rs1_addr_o,
     output logic [4:0]  rs2_addr_o,
     output logic [4:0]  rd_addr_o,
+    output logic        alu_src_o, //Operand 2 is Register or immediate
     
     output alu_op_t     alu_op_o,
     output lsu_op_t     lsu_op_o,
     output branch_op_t  branch_op_o,
     output mul_op_t     mul_op_o,
+    
     output logic        reg_write_o,
-    output logic        alu_src_o,
     output logic        mem_write_o,
     output logic        mem_to_reg_o,
-    output logic        mem_read_o,  // NEW: For Hazard Detection
+    output logic        mem_read_o,
+
     output logic        is_jump_o,
     output logic        is_jalr_o,
-    output logic        is_lui_o,    // NEW: Op A = 0
-    output logic        is_auipc_o,  // NEW: Op A = PC
+    output logic        is_lui_o,  
+    output logic        is_auipc_o, 
+
     output logic [63:0] imm_o
 );
 
@@ -43,21 +46,55 @@ module decode
     // IMMEDIATE GENERATION
     // ------------------------------------
     always_comb begin
+        imm_o = 64'b0; // default
+
         case (opcode)
-            OP_IMM, OP_LOAD, OP_JALR: 
-                imm_o = {{52{instr_i[31]}}, instr_i[31:20]};
-            OP_STORE: 
-                imm_o = {{52{instr_i[31]}}, instr_i[31:25], instr_i[11:7]};
-            OP_BRANCH: 
-                imm_o = {{51{instr_i[31]}}, instr_i[31], instr_i[7], instr_i[30:25], instr_i[11:8], 1'b0};
-            OP_JAL: 
-                imm_o = {{43{instr_i[31]}}, instr_i[31], instr_i[19:12], instr_i[20], instr_i[30:21], 1'b0};
-            OP_LUI, OP_AUIPC: // U-Type
-                imm_o = {{32{instr_i[31]}}, instr_i[31:12], 12'b0};
-            default:          
+            // I-Type immediates
+            OP_IMM, OP_LOAD, OP_JALR, OP_IMM_32, OP_SYSTEM: begin
+                imm_o = {{52{instr_i[31]}}, 
+                        instr_i[31:20]};
+            end
+
+            // S-Type immediates
+            OP_STORE: begin
+                imm_o = {{52{instr_i[31]}}, 
+                        instr_i[31:25], 
+                        instr_i[11:7]};
+            end
+
+            // B-Type immediates
+            OP_BRANCH: begin
+                imm_o = {{51{instr_i[31]}},
+                        instr_i[31], instr_i[7],
+                        instr_i[30:25], instr_i[11:8],
+                        1'b0};
+            end
+
+            // J-Type immediates
+            OP_JAL: begin
+                imm_o = {{43{instr_i[31]}},
+                        instr_i[31],
+                        instr_i[19:12],
+                        instr_i[20],
+                        instr_i[30:21],
+                        1'b0};
+            end
+
+            // U-Type immediates
+            OP_LUI, OP_AUIPC: begin
+                imm_o = {{32{instr_i[31]}}, 
+                        instr_i[31:12], 12'b0};
+            end
+
+            // No immediate field instructions
+            OP_REG, OP_REG_32, OP_FENCE: begin
                 imm_o = 64'b0;
+            end
+
+            default: imm_o = 64'b0;
         endcase
     end
+
 
     // ------------------------------------
     // CONTROL LOGIC
@@ -83,22 +120,33 @@ module decode
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b1;
                 case (funct3)
-                    3'b000: alu_op_o = ALU_ADD;
-                    3'b010: alu_op_o = ALU_SLT;
-                    3'b011: alu_op_o = ALU_SLTU;
-                    3'b100: alu_op_o = ALU_XOR;
-                    3'b110: alu_op_o = ALU_OR;
-                    3'b111: alu_op_o = ALU_AND;
-                    3'b001: alu_op_o = ALU_SLL;
-                    3'b101: alu_op_o = (funct7[5]) ? ALU_SRA : ALU_SRL;
+                    3'b000: alu_op_o = ALU_ADD;     //ADDI
+                    3'b010: alu_op_o = ALU_SLT;     //SLTI
+                    3'b011: alu_op_o = ALU_SLTU;    //SLTIU
+                    3'b100: alu_op_o = ALU_XOR;     //XORI
+                    3'b110: alu_op_o = ALU_OR;      //ORI
+                    3'b111: alu_op_o = ALU_AND;     //ANDI
+                    3'b001: alu_op_o = ALU_SLL;     //SLLI
+                    3'b101: alu_op_o = (funct7[5]) ? ALU_SRA : ALU_SRL; //SRAI & SRLI
+
                     default: alu_op_o = ALU_ADD;
+                endcase
+            end
+            OP_IMM_32: begin
+                reg_write_o = 1'b1;
+                alu_src_o   = 1'b1;
+                case(funct3)
+                    3'b000: alu_op_o = ALU_ADDW; // ADDIW
+                    3'b001: alu_op_o = ALU_SLLW; // SLLIW
+                    3'b101: alu_op_o = (funct7[5]) ? ALU_SRAW : ALU_SRLW; // SRAIW / SRLIW
+
+                    default: alu_op_o = ALU_ADDW;
                 endcase
             end
             OP_REG: begin
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b0;
-                
-                // CHECK FOR M-EXTENSION (Funct7 == 0x01)
+                // Multiplier (Funct7 == 0x01)
                 if (funct7 == 7'b0000001) begin
                     case (funct3)
                         3'b000: mul_op_o = M_MUL;
@@ -109,6 +157,7 @@ module decode
                         3'b101: mul_op_o = M_DIVU;
                         3'b110: mul_op_o = M_REM;
                         3'b111: mul_op_o = M_REMU;
+
                         default: mul_op_o = M_NONE;
                     endcase
                 end else begin
@@ -122,7 +171,33 @@ module decode
                         3'b101: alu_op_o = (funct7[5]) ? ALU_SRA : ALU_SRL;
                         3'b110: alu_op_o = ALU_OR;
                         3'b111: alu_op_o = ALU_AND;
+
                         default: alu_op_o = ALU_ADD;
+                    endcase
+                end
+            end
+            OP_REG_32: begin
+                reg_write_o = 1'b1;
+                alu_src_o   = 1'b0;
+                // Multiplier (Funct7 == 0x01)
+                if (funct7 == 7'b0000001) begin
+                    case (funct3)
+                        3'b000: mul_op_o = M_MULW;
+                        3'b100: mul_op_o = M_DIVW;
+                        3'b101: mul_op_o = M_DIVUW;
+                        3'b110: mul_op_o = M_REMW;
+                        3'b111: mul_op_o = M_REMUW;
+
+                        default: mul_op_o = M_NONE;
+                    endcase
+                end else begin
+                    // Standard ALU Ops
+                    case (funct3)
+                        3'b000: alu_op_o = (funct7[5]) ? ALU_SUBW : ALU_ADDW;
+                        3'b001: alu_op_o = ALU_SLLW;
+                        3'b101: alu_op_o = (funct7[5]) ? ALU_SRAW : ALU_SRLW;
+                        
+                        default: alu_op_o = ALU_ADDW;
                     endcase
                 end
             end
@@ -140,6 +215,7 @@ module decode
                     3'b100: lsu_op_o = LSU_LBU;
                     3'b101: lsu_op_o = LSU_LHU;
                     3'b110: lsu_op_o = LSU_LWU;
+
                     default: lsu_op_o = LSU_LD;
                 endcase
             end
@@ -152,6 +228,7 @@ module decode
                     3'b001: lsu_op_o = LSU_SH;
                     3'b010: lsu_op_o = LSU_SW;
                     3'b011: lsu_op_o = LSU_SD;
+                    
                     default: lsu_op_o = LSU_SD;
                 endcase
             end
@@ -169,7 +246,6 @@ module decode
                 alu_src_o   = 1'b1;
                 alu_op_o    = ALU_ADD;
             end
-            // --- NEW INSTRUCTIONS ---
             OP_LUI: begin
                 reg_write_o = 1'b1;
                 alu_src_o   = 1'b1; // Use Imm
@@ -182,6 +258,10 @@ module decode
                 is_auipc_o  = 1'b1; // Op A = PC
                 alu_op_o    = ALU_ADD; // PC + Imm
             end
+            OP_FENCE: begin
+                //Treat as NOP
+            end
+            
             default: reg_write_o = 1'b0;
         endcase
     end

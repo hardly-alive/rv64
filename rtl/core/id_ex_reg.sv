@@ -17,7 +17,7 @@ module id_ex_reg
     // ID Stage -> EX Stage Inputs (Datapath)
     //====================================================
     input  logic [63:0] pc_i,
-    input  logic [31:0] instr_i,     //new
+    input  logic [31:0] instr_i,
     input  logic [63:0] rs1_data_i,
     input  logic [63:0] rs2_data_i,
     input  logic [63:0] imm_i,
