@@ -36,7 +36,7 @@ sim: sw hw
 
 # 4. RUN SANITY CHECK
 sanity:
-	riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostdlib -T sw/link.ld -o dv/tests/bin/sanity.elf sw/crt0.s dv/tests/src/sanity_check.c
+	riscv64-unknown-elf-gcc -mcmodel=medany -march=rv64im -mabi=lp64 -nostdlib -T sw/link.ld -o dv/tests/bin/sanity.elf sw/crt0.s dv/tests/src/sanity_check.c
 	riscv64-unknown-elf-objcopy -O binary dv/tests/bin/sanity.elf dv/tests/bin/sanity.bin
 	hexdump -v -e '1/1 "%02x\n"' dv/tests/bin/sanity.bin > sw/program.hex
 	$(MAKE) hw

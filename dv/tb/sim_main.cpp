@@ -4,6 +4,10 @@
 
 #define TEST_EXIT_ADDR 0xF0000000
 
+double sc_time_stamp() {
+    return 0;
+}
+
 int main(int argc, char **argv) {
     Verilated::commandArgs(argc, argv);
     

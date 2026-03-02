@@ -1,10 +1,7 @@
-.section .text
+.section .text.init
 .global _start
 
 _start:
-    li sp, 4096         # Set Stack Pointer to top of 4KB RAM
-    call main           # Call C main function
-    
-loop:
-    j loop              # Infinite loop if main returns
-    
+    la sp, _stack_top
+    call main
+1:  j 1b

@@ -1,10 +1,37 @@
-OUTPUT_ARCH( "riscv" )
-ENTRY( _start )
+OUTPUT_ARCH("riscv")
+ENTRY(_start)
+
+MEMORY
+{
+  RAM (rwx) : ORIGIN = 0x80000000, LENGTH = 128K
+}
 
 SECTIONS
 {
-  . = 0x00000000;
-  .text : { *(.text) }
-  .data : { *(.data) }
-  .bss  : { *(.bss) }
+  . = ORIGIN(RAM);
+
+  .text : {
+    *(.text.init)
+    *(.text)
+    *(.text.*)
+  } > RAM
+
+  .rodata : {
+    *(.rodata)
+    *(.rodata.*)
+  } > RAM
+
+  .data : {
+    *(.data)
+    *(.data.*)
+  } > RAM
+
+  .bss : {
+    *(.bss)
+    *(.bss.*)
+    *(COMMON)
+  } > RAM
+
+  _end = .;
+  PROVIDE(_stack_top = ORIGIN(RAM) + LENGTH(RAM));
 }

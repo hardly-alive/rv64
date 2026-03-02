@@ -23,7 +23,7 @@ module branch_comp
             BRANCH_BEQ:  branch_taken_o = is_equal;
             BRANCH_BNE:  branch_taken_o = !is_equal;
             BRANCH_BLT:  branch_taken_o = is_less_signed;
-            BRANCH_BGE:  branch_taken_o = !is_less_signed; // >= is Not <
+            BRANCH_BGE:  branch_taken_o = !is_less_signed;
             BRANCH_BLTU: branch_taken_o = is_less_unsigned;
             BRANCH_BGEU: branch_taken_o = !is_less_unsigned;
             default:     branch_taken_o = 1'b0;

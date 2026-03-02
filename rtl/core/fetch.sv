@@ -29,7 +29,7 @@ module fetch (
     // PC Register
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            pc_q <= 64'b0;
+            pc_q <= 64'h8000_0000;
         end else begin
             pc_q <= pc_next;
         end

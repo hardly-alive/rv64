@@ -20,6 +20,7 @@ def compile_test(test_name):
     # 1. Compile (GCC)
     cmd_gcc = [
         "riscv64-unknown-elf-gcc",
+        "-mcmodel=medany",
         "-march=rv64im", "-mabi=lp64", "-nostdlib",
         "-T", "sw/link.ld",
         "-o", elf_file,
