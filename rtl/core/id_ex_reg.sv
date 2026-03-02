@@ -22,6 +22,14 @@ module id_ex_reg
     input  logic [63:0] rs2_data_i,
     input  logic [63:0] imm_i,
 
+    input  logic        csr_we_i,
+    input  csr_op_t     csr_op_i,
+    input  logic        is_ecall_i,
+    input  logic        is_ebreak_i,
+    input  logic        is_mret_i,
+    input  logic        illegal_instr_i,
+    input  logic [11:0] csr_addr_i,
+
     //====================================================
     // Register Address Inputs
     //====================================================
@@ -62,6 +70,14 @@ module id_ex_reg
     output logic [63:0] rs1_data_o,
     output logic [63:0] rs2_data_o,
     output logic [63:0] imm_o,
+
+    output logic        csr_we_o,
+    output csr_op_t     csr_op_o,
+    output logic        is_ecall_o,
+    output logic        is_ebreak_o,
+    output logic        is_mret_o,
+    output logic        illegal_instr_o,
+    output logic [11:0] csr_addr_o,
 
     //====================================================
     // Register Address Outputs
@@ -134,6 +150,14 @@ module id_ex_reg
             is_lui_o     <= 1'b0;
             is_auipc_o   <= 1'b0;
 
+            csr_we_o        <= 1'b0;
+            csr_op_o        <= CSR_NONE;
+            is_ecall_o      <= 1'b0;
+            is_ebreak_o     <= 1'b0;
+            is_mret_o       <= 1'b0;
+            illegal_instr_o <= 1'b0;
+            csr_addr_o      <= 12'b0;
+
         end else if (stall_i) begin
             // Stall: Hold previous values (no updates)
 
@@ -167,6 +191,14 @@ module id_ex_reg
             is_jalr_o    <= is_jalr_i;
             is_lui_o     <= is_lui_i;
             is_auipc_o   <= is_auipc_i;
+
+            csr_we_o        <= csr_we_i;
+            csr_op_o        <= csr_op_i;
+            is_ecall_o      <= is_ecall_i;
+            is_ebreak_o     <= is_ebreak_i;
+            is_mret_o       <= is_mret_i;
+            illegal_instr_o <= illegal_instr_i;
+            csr_addr_o      <= csr_addr_i;
         end
     end
 

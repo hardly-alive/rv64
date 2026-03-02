@@ -85,4 +85,34 @@ package riscv_pkg;
         M_REMUW
     } mul_op_t;
 
+    // ------------------------------------
+    // 4. CSR Addresses (Machine Mode)
+    // ------------------------------------
+    typedef enum logic [11:0] {
+        CSR_MSTATUS  = 12'h300, // Machine status register
+        CSR_MISA     = 12'h301, // ISA and extensions
+        CSR_MIE      = 12'h304, // Machine interrupt-enable register
+        CSR_MTVEC    = 12'h305, // Machine trap-handler base address
+        CSR_MSCRATCH = 12'h340, // Scratch register for machine trap handlers
+        CSR_MEPC     = 12'h341, // Machine exception program counter
+        CSR_MCAUSE   = 12'h342, // Machine trap cause
+        CSR_MTVAL    = 12'h343,
+        CSR_MIP      = 12'h344, // Machine interrupt pending
+        CSR_MCYCLE   = 12'hB00, // Machine cycle counter
+        CSR_MINSTRET = 12'hB02  // Machine instructions-retired counter
+    } csr_addr_t;
+
+    // ------------------------------------
+    // 5. CSR Operations (funct3)
+    // ------------------------------------
+    typedef enum logic [2:0] {
+        CSR_NONE = 3'b000,
+        CSR_RW   = 3'b001, // Atomic Read/Write
+        CSR_RS   = 3'b010, // Atomic Read/Set Bit
+        CSR_RC   = 3'b011, // Atomic Read/Clear Bit
+        CSR_RWI  = 3'b101, // Immediate Read/Write
+        CSR_RSI  = 3'b110, // Immediate Read/Set
+        CSR_RCI  = 3'b111  // Immediate Read/Clear
+    } csr_op_t;
+
 endpackage

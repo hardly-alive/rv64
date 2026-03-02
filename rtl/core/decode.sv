@@ -23,6 +23,13 @@ module decode
     output logic        is_lui_o,  
     output logic        is_auipc_o, 
 
+    output logic        csr_we_o,
+    output csr_op_t     csr_op_o,
+    output logic        is_ecall_o,
+    output logic        is_ebreak_o,
+    output logic        is_mret_o,
+    output logic        illegal_instr_o,
+
     output logic [63:0] imm_o
 );
 
@@ -50,9 +57,14 @@ module decode
 
         case (opcode)
             // I-Type immediates
-            OP_IMM, OP_LOAD, OP_JALR, OP_IMM_32, OP_SYSTEM: begin
+            OP_IMM, OP_LOAD, OP_JALR, OP_IMM_32: begin
                 imm_o = {{52{instr_i[31]}}, 
                         instr_i[31:20]};
+            end
+
+            //System immediates
+            OP_SYSTEM: begin
+                imm_o = {59'b0, instr_i[19:15]};
             end
 
             // S-Type immediates
@@ -101,19 +113,25 @@ module decode
     // ------------------------------------
     always_comb begin
         // Defaults
-        alu_op_o     = ALU_ADD;
-        lsu_op_o     = LSU_NONE;
-        branch_op_o  = BRANCH_NONE;
-        mul_op_o     = M_NONE;
-        reg_write_o  = 1'b0;
-        alu_src_o    = 1'b0;
-        mem_write_o  = 1'b0;
-        mem_read_o   = 1'b0; 
-        mem_to_reg_o = 1'b0;
-        is_jump_o    = 1'b0;
-        is_jalr_o    = 1'b0;
-        is_lui_o     = 1'b0;
-        is_auipc_o   = 1'b0;
+        alu_op_o        = ALU_ADD;
+        lsu_op_o        = LSU_NONE;
+        branch_op_o     = BRANCH_NONE;
+        mul_op_o        = M_NONE;
+        reg_write_o     = 1'b0;
+        alu_src_o       = 1'b0;
+        mem_write_o     = 1'b0;
+        mem_read_o      = 1'b0; 
+        mem_to_reg_o    = 1'b0;
+        is_jump_o       = 1'b0;
+        is_jalr_o       = 1'b0;
+        is_lui_o        = 1'b0;
+        is_auipc_o      = 1'b0;
+        csr_we_o        = 1'b0;
+        csr_op_o        = CSR_NONE;
+        is_ecall_o      = 1'b0;
+        is_ebreak_o     = 1'b0;
+        is_mret_o       = 1'b0;
+        illegal_instr_o = 1'b0;
 
         case (opcode)
             OP_IMM: begin
@@ -258,11 +276,44 @@ module decode
                 is_auipc_o  = 1'b1; // Op A = PC
                 alu_op_o    = ALU_ADD; // PC + Imm
             end
+
+            OP_SYSTEM: begin
+                if (funct3 == 3'b000) begin
+                    // ------------------------------------
+                    // Exceptions / Environment Calls
+                    // ------------------------------------
+                    case (instr_i[31:20]) // funct12
+                        12'h000: is_ecall_o  = 1'b1;
+                        12'h001: is_ebreak_o = 1'b1;
+                        12'h302: is_mret_o   = 1'b1;
+                        default: illegal_instr_o = 1'b1; // Unknown system action
+                    endcase
+                end else begin
+                    // ------------------------------------
+                    // CSR Read/Write Instructions
+                    // ------------------------------------
+                    // funct3 determines the CSR operation
+                    case (funct3)
+                        3'b001, 3'b010, 3'b011, // CSRRW, CSRRS, CSRRC
+                        3'b101, 3'b110, 3'b111: // CSRRWI, CSRRSI, CSRRCI
+                        begin
+                            csr_we_o    = 1'b1;
+                            reg_write_o = 1'b1; // CSR instructions write old value to 'rd'
+                            csr_op_o    = csr_op_t'(funct3);
+                        end
+                        default: illegal_instr_o = 1'b1; // Invalid CSR operation
+                    endcase
+                end
+            end
+
             OP_FENCE: begin
                 //Treat as NOP
             end
             
-            default: reg_write_o = 1'b0;
+            default: begin
+                reg_write_o = 1'b0;
+                illegal_instr_o = 1'b1;
+            end
         endcase
     end
 endmodule

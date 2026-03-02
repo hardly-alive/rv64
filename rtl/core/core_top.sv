@@ -117,6 +117,44 @@ module core_top
     logic        wb_reg_write;
     logic        wb_mem_to_reg;
 
+    //System & Trap Interconnect Wires
+    // Outputs from Decode
+    logic        id_csr_we;
+    csr_op_t     id_csr_op;
+    logic        id_is_ecall;
+    logic        id_is_ebreak;
+    logic        id_is_mret;
+    logic        id_illegal_instr;
+    logic [11:0] id_csr_addr;
+
+    // Outputs from ID/EX Pipeline Register
+    logic        ex_csr_we;
+    csr_op_t     ex_csr_op;
+    logic        ex_is_ecall;
+    logic        ex_is_ebreak;
+    logic        ex_is_mret;
+    logic        ex_illegal_instr;
+    logic [11:0] ex_csr_addr;
+
+    // Outputs from CSR Regfile
+    logic [63:0] csr_rdata;
+    logic        csr_valid;
+    logic [63:0] mtvec_val;
+    logic [63:0] mepc_val;
+
+    // Outputs from Trap Unit
+    logic        trap_en;
+    logic        mret_en;
+    logic [63:0] trap_cause;
+    logic [63:0] trap_pc;
+    logic [63:0] trap_val;
+    logic        trap_flush;
+    logic        pc_trap_sel;
+    logic [63:0] pc_trap_val;
+    
+    // CSR Write Data Selection (Register vs Immediate)
+    logic [63:0] csr_wdata;
+
     // ---------------------------------------------------------
     // STALL LOGIC
     // ---------------------------------------------------------
@@ -132,6 +170,8 @@ module core_top
         .branch_target_i (branch_target),
         .branch_taken_i  (pc_redirect),
         .stall_i         (stall_global), // Freeze PC
+        .trap_target_i (pc_trap_val),
+        .trap_taken_i  (pc_trap_sel),
         .imem_addr_o     (fetch_addr),
         .pc_out_o        (current_pc)
     );
@@ -155,7 +195,7 @@ module core_top
         .clk      (clk),
         .rst_n    (rst_n),
         .stall_i  (stall_global),  // Freeze Instruction
-        .flush_i  (pc_redirect),   
+        .flush_i  (pc_redirect || trap_flush),   
         .pc_i     (current_pc),
         .instr_i  (raw_instr),
         .pc_o     (id_pc),
@@ -166,24 +206,30 @@ module core_top
     // STAGE 2: DECODE
     // ---------------------------------------------------------
     decode u_decode (
-        .instr_i      (id_instr),
-        .rs1_addr_o   (dec_rs1),
-        .rs2_addr_o   (dec_rs2),
-        .rd_addr_o    (dec_rd),
-        .alu_op_o     (dec_alu_op),
-        .lsu_op_o     (dec_lsu_op),
-        .branch_op_o  (dec_branch_op),
-        .mul_op_o     (dec_mul_op),    // NEW
-        .reg_write_o  (dec_reg_write),
-        .alu_src_o    (dec_alu_src),
-        .mem_write_o  (dec_mem_write),
-        .mem_read_o   (dec_mem_read),   
-        .mem_to_reg_o (dec_mem_to_reg),
-        .is_jump_o    (dec_is_jump),
-        .is_jalr_o    (dec_is_jalr),
-        .is_lui_o     (dec_is_lui),     
-        .is_auipc_o   (dec_is_auipc),   
-        .imm_o        (dec_imm)
+        .instr_i         (id_instr),
+        .rs1_addr_o      (dec_rs1),
+        .rs2_addr_o      (dec_rs2),
+        .rd_addr_o       (dec_rd),
+        .alu_op_o        (dec_alu_op),
+        .lsu_op_o        (dec_lsu_op),
+        .branch_op_o     (dec_branch_op),
+        .mul_op_o        (dec_mul_op),
+        .reg_write_o     (dec_reg_write),
+        .alu_src_o       (dec_alu_src),
+        .mem_write_o     (dec_mem_write),
+        .mem_read_o      (dec_mem_read),   
+        .mem_to_reg_o    (dec_mem_to_reg),
+        .is_jump_o       (dec_is_jump),
+        .is_jalr_o       (dec_is_jalr),
+        .is_lui_o        (dec_is_lui),     
+        .is_auipc_o      (dec_is_auipc),
+        .csr_we_o        (id_csr_we),
+        .csr_op_o        (id_csr_op),
+        .is_ecall_o      (id_is_ecall),
+        .is_ebreak_o     (id_is_ebreak),
+        .is_mret_o       (id_is_mret),
+        .illegal_instr_o (id_illegal_instr),   
+        .imm_o           (dec_imm)
     );
 
     // Hazard Unit
@@ -200,17 +246,26 @@ module core_top
     // ---------------------------------------------------------
     // PIPELINE: ID -> EX
     // ---------------------------------------------------------
+    assign id_csr_addr = id_instr[31:20];
+
     id_ex_reg u_id_ex (
         .clk          (clk),
         .rst_n        (rst_n),
-        .flush_i      (pc_redirect || flush_ex),
+        .flush_i      (pc_redirect || flush_ex || trap_flush),
         .stall_i      (stall_global),
 
         .pc_i         (id_pc),
-        .instr_i      (id_instr),      //new:
+        .instr_i      (id_instr),
         .rs1_data_i   (reg_rs1_data),
         .rs2_data_i   (reg_rs2_data),
         .imm_i        (dec_imm),
+        .csr_we_i        (id_csr_we),
+        .csr_op_i        (id_csr_op),
+        .is_ecall_i      (id_is_ecall),
+        .is_ebreak_i     (id_is_ebreak),
+        .is_mret_i       (id_is_mret),
+        .illegal_instr_i (id_illegal_instr),
+        .csr_addr_i      (id_csr_addr),
         .rs1_addr_i   (dec_rs1),
         .rs2_addr_i   (dec_rs2),
         .rd_addr_i    (dec_rd),
@@ -233,6 +288,13 @@ module core_top
         .rs1_data_o   (ex_rs1_data),
         .rs2_data_o   (ex_rs2_data),
         .imm_o        (ex_imm),
+        .csr_we_o        (ex_csr_we),
+        .csr_op_o        (ex_csr_op),
+        .is_ecall_o      (ex_is_ecall),
+        .is_ebreak_o     (ex_is_ebreak),
+        .is_mret_o       (ex_is_mret),
+        .illegal_instr_o (ex_illegal_instr),
+        .csr_addr_o      (ex_csr_addr),
         .rs1_addr_o   (ex_rs1_addr),
         .rs2_addr_o   (ex_rs2_addr),
         .rd_addr_o    (ex_rd_addr),
@@ -329,19 +391,96 @@ module core_top
         .stall_mul_o (stall_mul)
     );
 
+    //MUX: CSR Data
+    assign csr_wdata = (ex_csr_op[2] == 1'b1) ? ex_imm : alu_final_a;
+
+    //CSR Regfile
+    csr_regfile u_csr (
+        .clk          (clk),
+        .rst_n        (rst_n),
+        
+        .addr_i       (ex_csr_addr),
+        .wdata_i      (csr_wdata),
+        .op_i         (ex_csr_op),
+        .we_i         (ex_csr_we),
+        .rdata_o      (csr_rdata),
+        .csr_valid_o  (csr_valid),
+        
+        .trap_en_i    (trap_en),
+        .trap_pc_i    (trap_pc),
+        .trap_cause_i (trap_cause),
+        .trap_val_i   (trap_val),
+        .mret_i       (mret_en),
+        .instret_i    (1'b0),        // Tie to 0 for now (implement instruction retire counter later)
+        
+        .mtvec_o      (mtvec_val),
+        .mepc_o       (mepc_val)
+    );
+
+    // Execute Stage: Memory Alignment Checker
+    logic is_misaligned;
+    always_comb begin
+        is_misaligned = 1'b0;
+        case (ex_lsu_op)
+            LSU_LH, LSU_LHU, LSU_SH: if (alu_result[0] != 1'b0)   is_misaligned = 1'b1; // Halfwords must be 2-byte aligned
+            LSU_LW, LSU_LWU, LSU_SW: if (alu_result[1:0] != 2'b00)  is_misaligned = 1'b1; // Words must be 4-byte aligned
+            LSU_LD, LSU_SD:          if (alu_result[2:0] != 3'b000) is_misaligned = 1'b1; // Doublewords must be 8-byte aligned
+            default: is_misaligned = 1'b0; // Bytes (LB, SB) are always aligned
+        endcase
+    end
+
+    logic load_misaligned;
+    logic store_misaligned;
+    assign load_misaligned  = is_misaligned && ex_mem_read;
+    assign store_misaligned = is_misaligned && ex_mem_write;
+
+    //Trap Unit
+    logic combined_illegal_instr;
+    assign combined_illegal_instr = ex_illegal_instr || (ex_csr_we && !csr_valid);
+
+    trap_unit u_trap (
+        .is_ecall_i      (ex_is_ecall),
+        .is_ebreak_i     (ex_is_ebreak),
+        .is_mret_i       (ex_is_mret),
+        .illegal_instr_i (combined_illegal_instr),
+        .load_misaligned_i  (load_misaligned),
+        .store_misaligned_i (store_misaligned),
+        .bad_addr_i         (alu_result),
+        
+        .curr_pc_i       (ex_pc),     // Assuming ex_pc is your EX stage PC wire
+        .curr_instr_i    (ex_instr),  // Assuming ex_instr is your EX stage instruction wire
+        
+        .mtvec_i         (mtvec_val),
+        .mepc_i          (mepc_val),
+        
+        .trap_en_o       (trap_en),
+        .mret_en_o       (mret_en),
+        .trap_cause_o    (trap_cause),
+        .trap_pc_o       (trap_pc),
+        .trap_val_o      (trap_val),
+        
+        .trap_flush_o    (trap_flush),
+        .pc_trap_sel_o   (pc_trap_sel),
+        .pc_trap_val_o   (pc_trap_val)
+    );
+
     // MUX: Choose ALU or Multiplier Result
-    assign final_ex_result = (ex_mul_op != M_NONE) ? mul_result : alu_result;
+    // Priority: CSR Instructions > Multiplier Instructions > Standard ALU
+    assign final_ex_result = (ex_csr_we && csr_valid) ? csr_rdata :
+                             (ex_mul_op != M_NONE)    ? mul_result : 
+                                                        alu_result;
 
     // ---------------------------------------------------------
     // PIPELINE: EX -> MEM
     // ---------------------------------------------------------
+
     ex_mem_reg u_ex_mem (
         .clk          (clk),
         .rst_n        (rst_n),
-        .flush_i      (flush_mem),
+        .flush_i      (flush_mem || trap_flush),
 
-        .pc_i         (ex_pc),        //new:
-        .instr_i      (ex_instr),     //new:
+        .pc_i         (ex_pc),        
+        .instr_i      (ex_instr),     
 
         .alu_result_i (final_ex_result),
         .store_data_i (alu_operand_b_raw),
