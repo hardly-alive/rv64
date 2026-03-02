@@ -6,8 +6,13 @@ OBJ_DIR = obj_dir
 RTL_DIR = rtl
 TB_DIR  = dv/tb
 INC_DIR = rtl/include
+VSRCS = $(wildcard $(RTL_DIR)/core/*.sv) \
+        $(wildcard $(RTL_DIR)/core/pipeline/*.sv) \
+        $(wildcard $(RTL_DIR)/core/exec/*.sv) \
+        $(wildcard $(RTL_DIR)/core/sys/*.sv) \
+        $(wildcard $(RTL_DIR)/core/sim/*.sv)
 
-SRCS = $(RTL_DIR)/include/riscv_pkg.sv $(wildcard $(RTL_DIR)/core/*.sv)
+SRCS = $(RTL_DIR)/include/riscv_pkg.sv $(VSRCS)
 CPP_TB = $(TB_DIR)/sim_main.cpp
 
 VERILATOR_FLAGS = -Wall --cc --exe --trace \
