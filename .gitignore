@@ -2,8 +2,6 @@
 # RISC-V Core Project .gitignore
 # ==========================================
 
-md
-
 # 1. Hardware Simulation Artifacts (Verilator)
 obj_dir/
 *.vcd
