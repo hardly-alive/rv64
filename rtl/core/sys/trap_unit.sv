@@ -35,7 +35,6 @@ module trap_unit (
     // Fetch / Pipeline Outputs (To Hazard/Fetch)
     // -----------------------------------------
     output logic        trap_flush_o,    // Tell pipeline registers to clear
-    output logic        pc_trap_sel_o,   // Override the Next PC mux
     output logic [63:0] pc_trap_val_o    // The override address
 );
 
@@ -55,7 +54,6 @@ module trap_unit (
         trap_val_o    = 64'b0;
         
         trap_flush_o  = 1'b0;
-        pc_trap_sel_o = 1'b0;
         pc_trap_val_o = 64'b0;
 
         // 1. Check for Traps (Highest Priority)
@@ -65,7 +63,6 @@ module trap_unit (
             trap_val_o    = {32'b0, curr_instr_i}; // Save the bad instruction
             
             trap_flush_o  = 1'b1;
-            pc_trap_sel_o = 1'b1;
             pc_trap_val_o = mtvec_i;               // Jump to handler
             
         end else if (is_ecall_i) begin
@@ -74,7 +71,6 @@ module trap_unit (
             trap_val_o    = 64'b0;                 // ECALL leaves mtval 0
             
             trap_flush_o  = 1'b1;
-            pc_trap_sel_o = 1'b1;
             pc_trap_val_o = mtvec_i;               // Jump to handler
             
         end else if (is_ebreak_i) begin
@@ -83,7 +79,6 @@ module trap_unit (
             trap_val_o    = {32'b0, curr_instr_i};
             
             trap_flush_o  = 1'b1;
-            pc_trap_sel_o = 1'b1;
             pc_trap_val_o = mtvec_i;               // Jump to handler
             
         end else if (load_misaligned_i) begin
@@ -92,7 +87,6 @@ module trap_unit (
             trap_val_o    = bad_addr_i;            // Save the bad address to mtval!
             
             trap_flush_o  = 1'b1;
-            pc_trap_sel_o = 1'b1;
             pc_trap_val_o = mtvec_i;
             
         end else if (store_misaligned_i) begin
@@ -101,7 +95,6 @@ module trap_unit (
             trap_val_o    = bad_addr_i;            // Save the bad address to mtval!
             
             trap_flush_o  = 1'b1;
-            pc_trap_sel_o = 1'b1;
             pc_trap_val_o = mtvec_i;
         end
 
@@ -110,7 +103,6 @@ module trap_unit (
             mret_en_o     = 1'b1;
             
             trap_flush_o  = 1'b1;                  // Flush pipeline just like a branch
-            pc_trap_sel_o = 1'b1;
             pc_trap_val_o = mepc_i;                // Jump back to saved PC
         end
     end

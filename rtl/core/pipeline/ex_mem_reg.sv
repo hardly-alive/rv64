@@ -1,32 +1,29 @@
 module ex_mem_reg 
     import riscv_pkg::*;
 (
-    //====================================================
-    // Global Signals
-    //====================================================
     input  logic        clk,
     input  logic        rst_n,
 
-    //====================================================
-    // Pipeline Control
-    //====================================================
+    input  logic        stall_i,
     input  logic        flush_i,
 
-    //====================================================
-    // Inputs from EX Stage (Trace / Spike Alignment)
-    //====================================================
-    input  logic [63:0] pc_i,         //new:
-    input  logic [31:0] instr_i,      //new:
+    // Trace Inputs
+    input  logic [63:0] pc_i,       
+    input  logic [31:0] instr_i,    
 
-    //====================================================
-    // Inputs from EX Stage (Datapath Results)
-    //====================================================
+    // Trace Outputs
+    output logic [63:0] pc_o,    
+    output logic [31:0] instr_o, 
+
+    // Datapath Inputs
     input  logic [63:0] alu_result_i,
     input  logic [63:0] store_data_i,
 
-    //====================================================
-    // Inputs from EX Stage (Register + Control)
-    //====================================================
+    // Datapath Outputs
+    output logic [63:0] alu_result_o,
+    output logic [63:0] store_data_o,
+
+    // Control Inputs
     input  logic [4:0]  rd_addr_i,
     input  logic        reg_write_i,
     input  lsu_op_t     lsu_op_i,
@@ -34,21 +31,7 @@ module ex_mem_reg
     input  logic        mem_read_i,
     input  logic        mem_to_reg_i,
 
-    //====================================================
-    // Outputs to MEM Stage (Trace / Spike Alignment)
-    //====================================================
-    output logic [63:0] pc_o,         //new:
-    output logic [31:0] instr_o,      //new:
-
-    //====================================================
-    // Outputs to MEM Stage (Datapath Results)
-    //====================================================
-    output logic [63:0] alu_result_o,
-    output logic [63:0] store_data_o,
-
-    //====================================================
-    // Outputs to MEM Stage (Register + Control)
-    //====================================================
+    // Control Outputs
     output logic [4:0]  rd_addr_o,
     output logic        reg_write_o,
     output lsu_op_t     lsu_op_o,
@@ -56,17 +39,11 @@ module ex_mem_reg
     output logic        mem_read_o,
     output logic        mem_to_reg_o
 );
-
-    //====================================================
-    // EX/MEM Pipeline Register
-    // - Reset/Flush : inject bubble (kill memory + writeback)
-    // - Normal      : pass EX stage outputs into MEM stage
-    //====================================================
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             // Trace
             pc_o         <= 64'b0;           
-            instr_o      <= 32'h0000_0013;   //new: NOP
+            instr_o      <= 32'h0000_0013; 
 
             // Datapath
             alu_result_o <= 64'b0;
@@ -81,13 +58,15 @@ module ex_mem_reg
             mem_to_reg_o <= 1'b0;
 
         end else if (flush_i) begin
-            // Flush kills side effects (store/load/writeback)
+            // Trace
             pc_o         <= 64'b0;
-            instr_o      <= 32'h0000_0013;   //new: NOP
+            instr_o      <= 32'h0000_0013;   
 
+            // Datapath
             alu_result_o <= 64'b0;
             store_data_o <= 64'b0;
 
+            // Control
             rd_addr_o    <= 5'b0;
             reg_write_o  <= 1'b0;
             lsu_op_o     <= LSU_NONE;
@@ -95,10 +74,12 @@ module ex_mem_reg
             mem_read_o   <= 1'b0;
             mem_to_reg_o <= 1'b0;
 
+        end else if (stall_i) begin
+            // No change
         end else begin
             // Trace
-            pc_o         <= pc_i;            //new:
-            instr_o      <= instr_i;         //new:
+            pc_o         <= pc_i;            
+            instr_o      <= instr_i;         
 
             // Datapath
             alu_result_o <= alu_result_i;

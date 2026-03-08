@@ -52,7 +52,7 @@ module decode
     // ------------------------------------
     // IMMEDIATE GENERATION
     // ------------------------------------
-    always_comb begin
+    always_comb begin : imm_gen
         imm_o = 64'b0; // default
 
         case (opcode)
@@ -111,7 +111,7 @@ module decode
     // ------------------------------------
     // CONTROL LOGIC
     // ------------------------------------
-    always_comb begin
+    always_comb begin : control_logic
         // Defaults
         alu_op_o        = ALU_ADD;
         lsu_op_o        = LSU_NONE;
