@@ -6,7 +6,7 @@ import sys
 TEST_SRC_DIR = "dv/tests/src"
 TEST_BIN_DIR = "dv/tests/bin"
 PROG_HEX = "sw/program.hex"
-SIM_EXE = "./obj_dir/Vcore_top"
+SIM_EXE = "./obj_dir/Vsoc_top"  # <-- UPDATED: Now points to the SoC executable
 
 # Ensure bin directory exists
 os.makedirs(TEST_BIN_DIR, exist_ok=True)
@@ -55,7 +55,8 @@ def compile_test(test_name, ext):
         return False
 
     # 3. Hex Dump (BIN -> HEX)
-    cmd_hex = f"hexdump -v -e '1/1 \"%02x\\n\"' {bin_file} > {PROG_HEX}"
+    # <-- UPDATED: Now formats into 32-bit words for the AXI RAM array
+    cmd_hex = f"hexdump -v -e '1/4 \"%08x\\n\"' {bin_file} > {PROG_HEX}"
     if os.system(cmd_hex) != 0:
         return False
 
@@ -110,7 +111,7 @@ def main():
             passed += 1
         else:
             print(f"{test_name+ext:<30} | ❌ FAIL")
-            # print(log) # Uncomment if you want to see the Verilator output on failure
+            print(log) # Uncomment if you want to see the Verilator output on failure
             failed += 1
 
     print("-" * 45)

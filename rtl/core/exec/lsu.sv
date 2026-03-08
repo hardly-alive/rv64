@@ -94,15 +94,15 @@ module lsu
         if (mem_write_i) begin
             case (lsu_op_i)
                 LSU_SB: begin
-                    dbus_wdata_o = store_data_i << (addr_offset * 8);
+                    dbus_wdata_o = store_data_i << {addr_offset, 3'b000};
                     dbus_be_o    = 8'b0000_0001 << addr_offset;
                 end
                 LSU_SH: begin
-                    dbus_wdata_o = store_data_i << (addr_offset * 8);
+                    dbus_wdata_o = store_data_i << {addr_offset, 3'b000};
                     dbus_be_o    = 8'b0000_0011 << addr_offset;
                 end
                 LSU_SW: begin
-                    dbus_wdata_o = store_data_i << (addr_offset * 8);
+                    dbus_wdata_o = store_data_i << {addr_offset, 3'b000};
                     dbus_be_o    = 8'b0000_1111 << addr_offset;
                 end
                 LSU_SD: begin
@@ -120,7 +120,7 @@ module lsu
     /* verilator lint_on UNUSED */
     
     // Process the incoming data from the bus
-    assign raw_shifted = dbus_rdata_i >> (addr_offset * 8);
+    assign raw_shifted = dbus_rdata_i >> {addr_offset, 3'b000};
 
     always_comb begin
         result_o = 64'b0;

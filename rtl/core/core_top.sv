@@ -35,7 +35,10 @@ module core_top
     logic stall_mul;    
     logic stall_fetch;  
     logic stall_lsu;    
-    logic stall_global; 
+    logic stall_if_id;
+    logic stall_id_ex;
+    logic stall_ex_mem;
+    logic stall_mem_wb;
 
     logic flush_hazard; 
     logic flush_if_id;  
@@ -219,16 +222,20 @@ module core_top
     // ---------------------------------------------------------
     // STALL & FLUSH CONTROL
     // ---------------------------------------------------------
-    assign stall_global = stall_hazard | stall_mul | stall_fetch | stall_lsu;
+    assign stall_if_id  = stall_hazard | stall_mul | stall_fetch | stall_lsu;
+    assign stall_id_ex  = stall_mul | stall_lsu;
+    assign stall_ex_mem = stall_lsu;
+    assign stall_mem_wb = stall_lsu;
+
     assign flush_if_id  = pc_redirect || trap_flush;
-    assign flush_id_ex  = pc_redirect || flush_hazard || trap_flush;
+    assign flush_id_ex  = pc_redirect || trap_flush || (flush_hazard && !stall_id_ex);
     assign flush_ex_mem = (stall_mul && !stall_lsu) || trap_flush;
 
 
     // ---------------------------------------------------------
     // STAGE 1: FETCH
     // ---------------------------------------------------------
-    assign fetch_ready  = ~stall_global; 
+    assign fetch_ready  = ~(stall_hazard | stall_mul | stall_fetch | stall_lsu); 
     assign do_flush     = pc_redirect || trap_flush;
     assign flush_target = trap_flush ? pc_trap_val : branch_target;
 
@@ -264,7 +271,7 @@ module core_top
     if_id_reg u_if_id (
         .clk      (clk),
         .rst_n    (rst_n),
-        .stall_i  (stall_global),
+        .stall_i  (stall_if_id),
         .flush_i  (flush_if_id),   
         .pc_i     (current_pc),
         .instr_i  (raw_instr),
@@ -322,7 +329,7 @@ module core_top
         .clk             (clk),
         .rst_n           (rst_n),
         .flush_i         (flush_id_ex),
-        .stall_i         (stall_global), 
+        .stall_i         (stall_id_ex), 
         .pc_i            (id_pc),
         .instr_i         (id_instr),
         .rs1_data_i      (reg_rs1_data),
@@ -529,7 +536,7 @@ module core_top
     ex_mem_reg u_ex_mem (
         .clk          (clk),
         .rst_n        (rst_n),
-        .stall_i      (stall_global),
+        .stall_i      (stall_ex_mem),
         .flush_i      (flush_ex_mem),
         .pc_i         (ex_pc),        
         .instr_i      (ex_instr),     
@@ -585,7 +592,7 @@ module core_top
     mem_wb_reg u_mem_wb (
         .clk          (clk),
         .rst_n        (rst_n), 
-        .stall_i      (stall_global),
+        .stall_i      (stall_mem_wb),
         .pc_i         (mem_pc),        
         .instr_i      (mem_instr),     
         .alu_result_i (mem_alu_result),
