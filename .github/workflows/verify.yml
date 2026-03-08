@@ -7,28 +7,22 @@ on:
     branches: [ main, master ]
 
 jobs:
-  regression-test:
+  build-and-test:
     runs-on: ubuntu-latest
-    
-    # We use a pre-built container to keep the run time under 2 minutes
-    # You can build this locally once or use a community-maintained one
-    container: 
-      image: ghcr.io/chipsalliance/verilator:latest 
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive  # Crucial since you have riscv-tests-repo
 
-      - name: Install RISC-V Toolchain
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-riscv64-unknown-elf spike python3
+      - name: Build Docker Image
+        run: docker build -t riscv-lab .
 
       - name: Run Regression Suite
+        # We run the command INSIDE the image we just built
         run: |
-          make regression
+          docker run --rm -v ${{ github.workspace }}:/work riscv-lab make regression
         
       - name: Run Spike Co-Simulation
         run: |
-          # Verify a representative test against the golden model
-          make spike TEST=alu_test
+          docker run --rm -v ${{ github.workspace }}:/work riscv-lab make spike TEST=alu_test
