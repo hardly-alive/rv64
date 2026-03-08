@@ -1,0 +1,34 @@
+name: RV64IM Verification
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  regression-test:
+    runs-on: ubuntu-latest
+    
+    # We use a pre-built container to keep the run time under 2 minutes
+    # You can build this locally once or use a community-maintained one
+    container: 
+      image: ghcr.io/chipsalliance/verilator:latest 
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install RISC-V Toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-riscv64-unknown-elf spike python3
+
+      - name: Run Regression Suite
+        run: |
+          make regression
+        
+      - name: Run Spike Co-Simulation
+        run: |
+          # Verify a representative test against the golden model
+          make spike TEST=alu_test

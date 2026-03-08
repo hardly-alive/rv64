@@ -44,7 +44,7 @@ sim: sw hw
 	./$(OBJ_DIR)/V$(TOP)
 
 # 4. RUN SANITY CHECK
-sanity:
+sanity: clean hw
 	riscv64-unknown-elf-gcc -mcmodel=medany -march=rv64im -mabi=lp64 -nostdlib -T sw/link.ld -o dv/tests/bin/sanity.elf sw/crt0.s dv/tests/src/sanity_check.c
 	riscv64-unknown-elf-objcopy -O binary dv/tests/bin/sanity.elf dv/tests/bin/sanity.bin
 	hexdump -v -e '1/4 "%08x\n"' dv/tests/bin/sanity.bin > sw/program.hex
@@ -52,7 +52,7 @@ sanity:
 	./$(OBJ_DIR)/V$(TOP)
 
 # 5. SPIKE CO-SIMULATION
-spike:
+spike: clean hw regression
 	@echo "🔍 Running Spike Co-Simulation for: $(TEST)"
 	hexdump -v -e '1/4 "%08x\n"' dv/tests/bin/$(TEST).bin > sw/program.hex
 	$(MAKE) hw
@@ -84,7 +84,7 @@ clean:
 	rm -f sw/program.hex
 
 # Run all tests
-regression:
+regression: clean hw
 	python3 dv/tests/scripts/run_regression.py
 
 .PHONY: all hw sw sim sanity spike regression clean
