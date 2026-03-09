@@ -31,6 +31,7 @@ module lsu
 );
 
     logic [2:0] addr_offset;
+
     assign dbus_addr_o = addr_i;
     assign addr_offset = addr_i[2:0];
     assign dbus_we_o   = mem_write_i; 
@@ -56,10 +57,10 @@ module lsu
                 if (is_mem_op) begin
                     dbus_req_o = 1'b1;
                     
-                    // If memory doesn't instantly finish the transaction, we stall
+                    // If memory doesn't instantly finish the transaction = stall
                     if (!dbus_gnt_i || !dbus_rvalid_i) begin
                         stall_lsu_o = 1'b1;
-                        // If we got the grant but no data yet, move to wait state
+                        // If grant but no data yet = move to wait state
                         if (dbus_gnt_i) begin
                             state_n = WAIT_RVALID; 
                         end
@@ -74,7 +75,7 @@ module lsu
                 dbus_req_o  = 1'b0; 
                 
                 if (dbus_rvalid_i) begin
-                    stall_lsu_o = 1'b0; // Data arrived! Unfreeze pipeline.
+                    stall_lsu_o = 1'b0; // Data arrived = Unfreeze pipeline
                     state_n     = IDLE;
                 end
             end

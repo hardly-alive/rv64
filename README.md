@@ -1,37 +1,43 @@
 # Aether-RV64IM
-
 **A High-Performance 5-Stage Pipelined RISC-V Core**
 
-Aether-RV64IM is a synthesizable 64-bit RISC-V processor core written in SystemVerilog. It features a classic 5-stage in-order pipeline, full data forwarding for hazard resolution, and a dual-port AXI4-Lite interface for SoC integration. The core is rigorously verified using a **Synchronous Co-Simulation** strategy against the Berkeley Spike Golden Model.
+![ISA](https://img.shields.io/badge/ISA-RV64IM-blue)
+![Bus](https://img.shields.io/badge/Bus-AXI4--Lite-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
 
----
+Aether-RV64IM is a synthesizable 64-bit RISC-V processor core written in SystemVerilog. It has a classic 5-stage in-order pipeline. It features full data forwarding for structural hazard resolution and a dual-port AXI4-Lite interface for seamless SoC integration. The core is rigorously verified using a **Synchronous Co-Simulation** strategy against the Berkeley Spike Golden Model and through **Official RISC-V ISA test suite**.
 
 ## 🏗 Microarchitecture
 
+![Aether-RV64IM Architecture](./images/aether_architecture.png)
+
 * **Pipeline:** 5-Stage (IF, ID, EX, MEM, WB).
-* **ISA Support:** RV64I (Base Integer) + M (Hardware Multiply/Divide).
-* **Hazard Unit:** * **Forwarding:** `MEM -> EX` and `WB -> EX` stages to minimize stalls.
-* **Stalls:** Automatic hardware interlocking for Load-Use hazards.
-
-
-* **Bus Interface:** Independent Instruction and Data AXI4-Lite Managers.
+* **ISA Support:** RV64I (64 Bit Base Integer) + M (Hardware Multiply/Divide).
+* **Hazard Management:** 
+    * **Data Forwarding:** `MEM -> EX` and `WB -> EX` bypass paths to minimize stalls.
+  * **Interlocking:** Automatic hardware stall/flush logic for Load-Use hazards and branch mispredictions.
+* **Bus Interface:** Independent Instruction and Data AXI4-Lite Managers (Harvard Architecture).
 * **Reset Vector:** `0x80000000`.
 
 ---
 
 ## 📂 Project Structure
-
 ```text
-├── rtl/               # Synthesizable RTL
-│   ├── core/          # CPU Core Logic (Fetch, Decode, Exec, etc.)
-│   ├── include/       # Global Packages & Parameter Definitions
-│   └── soc_testing/   # AXI RAM & SoC Wrappers for simulation
 ├── dv/                # Design Verification
 │   ├── tb/            # Verilator C++ Testbench (sim_main.cpp)
-│   ├── tests/         # Unit tests and Spike comparison scripts
-│   └── riscv-tests-repo/ # Integrated official RISC-V ISA tests
-├── sw/                # Linker scripts and boot code
-└── Dockerfile         # Portable toolchain environment
+│   └── tests/         # Unit tests and Spike comparison Python scripts
+│       ├── bin/       # Integrated official RISC-V ISA test suite
+│       ├── env/       # Header File for official RISC-V ISA test suite
+│       ├── scripts/   # Regression and Spike comparison Python scripts
+│       └── src/       # C language tests + RV64I & RV64M tests
+├── images/            # Architecture diagrams and waveforms
+├── rtl/               # Synthesizable SystemVerilog Source
+│   ├── core/          # CPU Core Logic
+│   ├── include/       # Global Packages & Parameter Definitions
+│   └── soc_testing/   # AXI RAM & SoC Wrappers for simulation
+├── sw/                # Linker scripts and boot code (crt0.s)
+├── Dockerfile         # Portable toolchain environment
+└── Makefile           # Automated build and test targets
 
 ```
 
@@ -43,27 +49,40 @@ This core uses a dual-layered verification approach to ensure 100% architectural
 
 ### 1. Regression Suite
 
-A suite of 74 tests (including official `riscv-tests`) is executed via Verilator. The testbench monitors the `tohost` CSR or a memory-mapped exit address to determine pass/fail status.
+A comprehensive suite of 74 architectural tests (integrating the official `riscv-tests for I & M extensions`) is executed via Verilator.
 
 ### 2. Spike Co-Simulation
 
-For deep architectural validation, the core is compared line-by-line against **Spike**.
+For deep architectural validation, the core is compared line-by-line against **Spike** (the official RISC-V ISA simulator).
 
-* **Tracer:** A hardware monitor (`tracer.sv`) captures every retired instruction.
-* **Golden Model:** Spike generates an execution trace of the same `.elf`.
-* **Comparison:** A Python script synchronizes the two traces, filtering pipeline artifacts (stalls/redundant commits) to verify that Program Counters and Register file updates match perfectly.
+* **Tracer:** A hardware monitor captures every retired instruction.
+* **Synchronization:** A custom Python script synchronizes the RTL trace with the Spike trace, filtering out pipeline artifacts to ensure Program Counters and Register file updates match flawlessly.
 
 ---
 
-## 🚀 Quick Start (Docker)
+## Quick Start (Docker)
 
-Ensure Docker is installed, then run the full verification suite with a single command:
+The easiest way to simulate the core without installing EDA tools locally is via Docker.
+
+**1. Clone the repository (with submodules):**
 
 ```bash
-# Build the environment
+git clone --recursive [https://github.com/hardly-alive/rv64.git](https://github.com/hardly-alive/rv64.git)
+cd YOUR_REPO
+
+```
+
+**2. Build the environment:**
+
+```bash
 docker build -t riscv-lab .
 
-# Run the 74-test regression
+```
+
+**3. Run Verification:**
+
+```bash
+# Run the full 74-test regression
 docker run --rm -v $(pwd):/work riscv-lab make regression
 
 # Run a specific Spike Co-Simulation
@@ -73,19 +92,17 @@ docker run --rm -v $(pwd):/work riscv-lab make spike TEST=alu_test
 
 ---
 
-## 🛠 Prerequisites (Local Install)
+## Prerequisites (Local Install)
 
-If running without Docker, you will need:
+If running without Docker, ensure the following are in your `$PATH`:
 
-* **Verilator:** 5.002+
-* **RISC-V Toolchain:** `riscv64-unknown-elf-gcc`
-* **Spike:** ISA Simulator
-* **Python:** 3.8+
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+* **Verilator:** `v5.002+`
+* **RISC-V GNU Toolchain:** `riscv64-unknown-elf-gcc`
+* **Spike:** `riscv-isa-sim`
+* **Python:** `3.8+`
 
 ---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.

@@ -140,7 +140,7 @@ module core_top
     // -----------------------------------------
     // Forwarding signals
     logic [63:0] alu_operand_a;
-    logic [63:0] alu_operand_b_raw;
+    logic [63:0] alu_operand_b;
 
     // ALU signals
     logic [63:0] alu_final_a;
@@ -408,12 +408,12 @@ module core_top
 
     always_comb begin
         if (mem_reg_write && (mem_rd_addr != 0) && (mem_rd_addr == ex_rs2_addr)) begin
-             if (mem_mem_to_reg) alu_operand_b_raw = lsu_final_data;
-             else                alu_operand_b_raw = mem_alu_result;
+             if (mem_mem_to_reg) alu_operand_b = lsu_final_data;
+             else                alu_operand_b = mem_alu_result;
         end else if (wb_reg_write && (wb_rd_addr != 0) && (wb_rd_addr == ex_rs2_addr)) begin
-             alu_operand_b_raw = wb_final_data;
+             alu_operand_b = wb_final_data;
         end else begin
-             alu_operand_b_raw = ex_rs2_data;
+             alu_operand_b = ex_rs2_data;
         end
     end
 
@@ -421,7 +421,7 @@ module core_top
     branch_comp u_branch (
         .branch_op_i     (ex_branch_op),
         .op_a_i          (alu_operand_a),
-        .op_b_i          (alu_operand_b_raw),
+        .op_b_i          (alu_operand_b),
         .branch_taken_o  (branch_taken)
     );
     
@@ -441,7 +441,7 @@ module core_top
             alu_final_b = ex_imm;
         end else begin
             alu_final_a = alu_operand_a;
-            alu_final_b = (ex_alu_src) ? ex_imm : alu_operand_b_raw;
+            alu_final_b = (ex_alu_src) ? ex_imm : alu_operand_b;
         end
     end
 
@@ -459,7 +459,7 @@ module core_top
         .rst_n       (rst_n),
         .mul_op_i    (ex_mul_op),
         .op_a_i      (alu_operand_a),
-        .op_b_i      (alu_operand_b_raw),
+        .op_b_i      (alu_operand_b),
         .result_o    (mul_result),
         .stall_mul_o (stall_mul)
     );
@@ -541,7 +541,7 @@ module core_top
         .pc_i         (ex_pc),        
         .instr_i      (ex_instr),     
         .alu_result_i (final_ex_result),
-        .store_data_i (alu_operand_b_raw),
+        .store_data_i (alu_operand_b),
         .rd_addr_i    (ex_rd_addr),
         .reg_write_i  (ex_reg_write),
         .lsu_op_i     (ex_lsu_op),

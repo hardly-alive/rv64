@@ -13,7 +13,7 @@ module csr_regfile
     input  logic        we_i,
     
     output logic [63:0] rdata_o,
-    output logic        csr_valid_o,  // NEW: Tells decoder if address is legal
+    output logic        csr_valid_o,  
 
     // -----------------------------------------
     // Hardware Trap Interface
@@ -26,9 +26,9 @@ module csr_regfile
 
     input  logic [63:0] trap_cause_i, // Cause code
     input  logic [63:0] trap_val_i,   // mtval (faulting address/instruction)
-    
-    input  logic        mret_i,       // NEW: MRET instruction executed
-    input  logic        instret_i,    // NEW: Instruction successfully retired
+
+    input  logic        mret_i,    
+    input  logic        instret_i,  
     
     output logic [63:0] mtvec_o,      
     output logic [63:0] mepc_o        
@@ -52,11 +52,9 @@ module csr_regfile
     logic [63:0] csr_read_val;
     
     always_comb begin
-        csr_valid_o = 1'b1; // Default to valid
+        csr_valid_o = 1'b1;
         case (addr_i)
             CSR_MSTATUS:  csr_read_val = mstatus;
-            // MIE and MIP are often mapped into bits of mstatus in simple cores, 
-            // but we can just return 0 if we don't support external interrupts yet.
             CSR_MIE:      csr_read_val = 64'b0; 
             CSR_MIP:      csr_read_val = 64'b0;
             CSR_MTVEC:    csr_read_val = mtvec;
@@ -69,7 +67,7 @@ module csr_regfile
             CSR_MISA:     csr_read_val = 64'h8000_0000_0010_0100; // RV64IM
             default: begin
                 csr_read_val = 64'b0;
-                csr_valid_o  = 1'b0; // Flag illegal CSR access!
+                csr_valid_o  = 1'b0; // Flag illegal CSR access
             end
         endcase
     end
@@ -114,7 +112,7 @@ module csr_regfile
             // Priority 1: Hardware Traps
             // ----------------------------------
             if (trap_en_i) begin
-                mepc     <= {trap_pc_i[63:2], 2'b00}; // Clear lower 2 bits
+                mepc     <= {trap_pc_i[63:2], 2'b00}; 
                 mcause   <= trap_cause_i;
                 mtval    <= trap_val_i;
                 
@@ -129,7 +127,7 @@ module csr_regfile
             else if (mret_i) begin
                 mstatus[3] <= mstatus[7]; // MIE = MPIE
                 mstatus[7] <= 1'b1;       // MPIE = 1
-                mstatus[12:11] <= 2'b11;  // MPP = 11 (we only have M-mode)
+                mstatus[12:11] <= 2'b11;  // MPP = 11
             end
             // ----------------------------------
             // Priority 3: Software Writes
@@ -137,13 +135,11 @@ module csr_regfile
             else if (we_i && csr_valid_o) begin
                 case (addr_i)
                     CSR_MSTATUS: begin
-                        // STRICT MASKING: Only MIE (3) and MPIE (7) are writable
                         mstatus[3] <= final_wdata[3];
                         mstatus[7] <= final_wdata[7];
-                        // MPP (12:11) remains 11. Everything else remains 0.
                     end
                     CSR_MTVEC: begin
-                        // Direct mode only: Force lower 2 bits to 00
+                        // Direct mode, force lower 2 bits to 00
                         mtvec <= {final_wdata[63:2], 2'b00};
                     end
                     CSR_MSCRATCH: mscratch <= final_wdata;

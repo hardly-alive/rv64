@@ -6,7 +6,7 @@ module decode
     output logic [4:0]  rs1_addr_o,
     output logic [4:0]  rs2_addr_o,
     output logic [4:0]  rd_addr_o,
-    output logic        alu_src_o, //Operand 2 is Register or immediate
+    output logic        alu_src_o,
     
     output alu_op_t     alu_op_o,
     output lsu_op_t     lsu_op_o,
@@ -223,7 +223,7 @@ module decode
                 reg_write_o  = 1'b1;
                 alu_src_o    = 1'b1;
                 mem_to_reg_o = 1'b1;
-                mem_read_o   = 1'b1; // This is a Load!
+                mem_read_o   = 1'b1;
                 alu_op_o     = ALU_ADD;
                 case (funct3)
                     3'b000: lsu_op_o = LSU_LB;

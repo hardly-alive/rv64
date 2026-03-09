@@ -5,7 +5,7 @@ module trap_unit (
     input  logic        is_ecall_i,
     input  logic        is_ebreak_i,
     input  logic        is_mret_i,
-    input  logic        illegal_instr_i, // From Decoder or CSR Valid check
+    input  logic        illegal_instr_i,
     input  logic        load_misaligned_i,
     input  logic        store_misaligned_i,
     input  logic [63:0] bad_addr_i,
@@ -41,8 +41,8 @@ module trap_unit (
     // RISC-V Machine Mode Exception Codes
     localparam logic [63:0] CAUSE_ILLEGAL_INSTR    = 64'd2;
     localparam logic [63:0] CAUSE_BREAKPOINT       = 64'd3;
-    localparam logic [63:0] CAUSE_LOAD_MISALIGNED  = 64'd4;  // NEW
-    localparam logic [63:0] CAUSE_STORE_MISALIGNED = 64'd6;  // NEW
+    localparam logic [63:0] CAUSE_LOAD_MISALIGNED  = 64'd4;  
+    localparam logic [63:0] CAUSE_STORE_MISALIGNED = 64'd6;  
     localparam logic [63:0] CAUSE_ECALL_MMODE      = 64'd11;
 
     always_comb begin
@@ -84,7 +84,7 @@ module trap_unit (
         end else if (load_misaligned_i) begin
             trap_en_o     = 1'b1;
             trap_cause_o  = CAUSE_LOAD_MISALIGNED;
-            trap_val_o    = bad_addr_i;            // Save the bad address to mtval!
+            trap_val_o    = bad_addr_i;            // Save the bad address to mtval
             
             trap_flush_o  = 1'b1;
             pc_trap_val_o = mtvec_i;
@@ -92,7 +92,7 @@ module trap_unit (
         end else if (store_misaligned_i) begin
             trap_en_o     = 1'b1;
             trap_cause_o  = CAUSE_STORE_MISALIGNED;
-            trap_val_o    = bad_addr_i;            // Save the bad address to mtval!
+            trap_val_o    = bad_addr_i;            // Save the bad address to mtval
             
             trap_flush_o  = 1'b1;
             pc_trap_val_o = mtvec_i;
@@ -102,7 +102,7 @@ module trap_unit (
         else if (is_mret_i) begin
             mret_en_o     = 1'b1;
             
-            trap_flush_o  = 1'b1;                  // Flush pipeline just like a branch
+            trap_flush_o  = 1'b1;                  // Flush pipeline
             pc_trap_val_o = mepc_i;                // Jump back to saved PC
         end
     end

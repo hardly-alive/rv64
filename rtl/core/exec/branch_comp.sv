@@ -4,7 +4,6 @@ module branch_comp
     input  branch_op_t  branch_op_i,
     input  logic [63:0] op_a_i,
     input  logic [63:0] op_b_i,
-
     output logic        branch_taken_o
 );
 

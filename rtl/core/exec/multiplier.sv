@@ -19,7 +19,7 @@ module multiplier
     logic [5:0]  counter;      
     logic [5:0]  counter_next;
     
-    // Input Latches to protect against pipeline changes during stall
+    // Input Latches 
     logic [63:0] latched_a;
     logic [63:0] latched_b;
     mul_op_t     latched_mul_op;
@@ -46,9 +46,6 @@ module multiplier
             state   <= next_state;
             counter <= counter_next;
 
-            // ------------------------------------------------------------
-            // FIX: latch inputs ONLY when accepting a new operation in IDLE
-            // ------------------------------------------------------------
             if (state == IDLE && mul_op_i != M_NONE) begin
                 latched_a      <= op_a_i;
                 latched_b      <= op_b_i;
@@ -74,18 +71,13 @@ module multiplier
 
         case (state)
 
-            // ------------------------------------------------------------
             // IDLE: accept new request
-            // ------------------------------------------------------------
             IDLE: begin
                 if (mul_op_i != M_NONE) begin
                     next_state  = CALC;
                     stall_mul_o = 1'b1;
 
-                    // ------------------------------------------------------------
-                    // FIX: off-by-one latency correction.
                     // If latency is N cycles, load counter = N-1.
-                    // ------------------------------------------------------------
                     if (mul_op_i == M_DIV  || mul_op_i == M_DIVU ||
                         mul_op_i == M_REM  || mul_op_i == M_REMU ||
                         mul_op_i == M_DIVW || mul_op_i == M_DIVUW ||
@@ -96,9 +88,7 @@ module multiplier
                 end
             end
 
-            // ------------------------------------------------------------
             // CALC: busy state, stall asserted
-            // ------------------------------------------------------------
             CALC: begin
                 stall_mul_o = 1'b1;
 
@@ -108,15 +98,8 @@ module multiplier
                 if (counter == 0) begin
                     next_state = DONE;
 
-                    // ------------------------------------------------------------
-                    // FIX: Use latched_mul_op, NOT mul_op_i.
-                    // mul_op_i may change while stalled.
-                    // ------------------------------------------------------------
                     case (latched_mul_op)
-
-                        // -----------------------------
                         // 64-bit Multiply Instructions
-                        // -----------------------------
                         M_MUL:    result_next = latched_a * latched_b;
 
                         M_MULH: begin
@@ -134,11 +117,8 @@ module multiplier
                             result_next  = full_mul_res[127:64];
                         end
 
-                        // -----------------------------
                         // 64-bit Divide/Reminder
-                        // -----------------------------
                         M_DIV: begin
-                            // FIX: RISC-V overflow case INT64_MIN / -1 => INT64_MIN
                             if (latched_b == 0)
                                 result_next = 64'hFFFF_FFFF_FFFF_FFFF;
                             else if (($signed(latched_a) == 64'sh8000_0000_0000_0000) &&
@@ -156,7 +136,6 @@ module multiplier
                         end
 
                         M_REM: begin
-                            // FIX: RISC-V overflow case INT64_MIN % -1 => 0
                             if (latched_b == 0)
                                 result_next = latched_a;
                             else if (($signed(latched_a) == 64'sh8000_0000_0000_0000) &&
@@ -173,9 +152,7 @@ module multiplier
                                 result_next = latched_a % latched_b;
                         end
 
-                        // -----------------------------
                         // 32-bit WORD Instructions
-                        // -----------------------------
                         M_MULW: begin
                             logic signed [31:0] a32;
                             logic signed [31:0] b32;
@@ -196,11 +173,10 @@ module multiplier
                             a32 = latched_a[31:0];
                             b32 = latched_b[31:0];
 
-                            // FIX: div-by-zero => -1
+                            // div-by-zero => -1
                             if (b32 == 0)
                                 res32 = -1;
 
-                            // FIX: RISC-V overflow case INT32_MIN / -1 => INT32_MIN
                             else if ((a32 == 32'sh8000_0000) && (b32 == -32'sd1))
                                 res32 = 32'sh8000_0000;
 
@@ -218,13 +194,13 @@ module multiplier
                             a32 = latched_a[31:0];
                             b32 = latched_b[31:0];
 
-                            // FIX: div-by-zero => all 1s
+                            // div-by-zero => all 1s
                             if (b32 == 0)
                                 res32 = 32'hFFFF_FFFF;
                             else
                                 res32 = a32 / b32;
 
-                            // NOTE: DIVUW is unsigned but result is sign-extended (spec)
+                            // DIVUW is unsigned but result is sign-extended
                             result_next = {{32{res32[31]}}, res32};
                         end
 
@@ -236,11 +212,10 @@ module multiplier
                             a32 = latched_a[31:0];
                             b32 = latched_b[31:0];
 
-                            // FIX: div-by-zero => dividend
+                            // div-by-zero => dividend
                             if (b32 == 0)
                                 res32 = a32;
 
-                            // FIX: RISC-V overflow case INT32_MIN % -1 => 0
                             else if ((a32 == 32'sh8000_0000) && (b32 == -32'sd1))
                                 res32 = 32'sd0;
 
@@ -263,7 +238,7 @@ module multiplier
                             else
                                 res32 = a32 % b32;
 
-                            // NOTE: REMUW is unsigned but result is sign-extended (spec)
+                            // REMUW is unsigned but result is sign-extended 
                             result_next = {{32{res32[31]}}, res32};
                         end
 
@@ -272,11 +247,8 @@ module multiplier
                 end
             end
 
-            // ------------------------------------------------------------
             // DONE: one cycle completion state
-            // ------------------------------------------------------------
             DONE: begin
-                // NOTE: Stall drops here, upstream can issue next op next cycle.
                 stall_mul_o = 1'b0;
                 next_state  = IDLE;
             end

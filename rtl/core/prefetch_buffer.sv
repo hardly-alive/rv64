@@ -44,7 +44,7 @@ module prefetch_buffer #(
     // ---------------------------------------------------------
     // 1. Bus Control & Overflow Prevention
     // ---------------------------------------------------------
-    // Only request memory if the FIFO has guaranteed space for ALL in-flight transactions
+    // Only send a request if the FIFO has guaranteed space for ALL in-flight transactions
     logic space_available;
     assign space_available = (fifo_count + outstanding_q) < DEPTH;
     
@@ -52,18 +52,18 @@ module prefetch_buffer #(
     assign ibus_addr_o = fetch_pc_q;
 
     // ---------------------------------------------------------
-    // 2. The "Drop Counter" (Stale Data Handler)
+    // 2. Drop Counter
     // ---------------------------------------------------------
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             outstanding_q <= '0;
             drop_q        <= '0;
         end else begin
-            // Keep a running tally of transactions in the bus
+            // Keep a count of transactions in the bus
             outstanding_q <= outstanding_q + {3'b0, req_success} - {3'b0, ibus_rvalid_i};
             
             if (flush_i) begin
-                // A branch occurred! Everything outstanding must be dropped.
+                // When a branch occurs everything outstanding must be dropped.
                 drop_q <= outstanding_q + {3'b0, req_success} - {3'b0, ibus_rvalid_i};
             end else if (ibus_rvalid_i && (drop_q > 0)) begin
                 // Safely discard the stale data as it arrives

@@ -13,8 +13,7 @@ module tracer (
     
     logic [63:0] prev_pc;
     always @(posedge clk) begin
-        // Only print if valid AND it's not the same PC we just printed 
-        // (unless it's a branch to self)
+        // Only print if valid AND it's not the same PC we just printed unless it's a branch to self
         if (valid_wb_i && reg_write_i && (rd_addr_i != 0) && (pc_i != prev_pc)) begin
             $display("core   0: 0x%016x (0x%08x) x%0d  0x%016x", 
                      pc_i, instr_i, rd_addr_i, rd_data_i);

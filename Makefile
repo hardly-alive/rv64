@@ -1,41 +1,33 @@
-# ------------------------------------------------------------------------------
 # VARIABLES
-# ------------------------------------------------------------------------------
 TOP     = soc_top
 OBJ_DIR = obj_dir
 RTL_DIR = rtl
 TB_DIR  = dv/tb
 INC_DIR = rtl/include
-VSRCS = $(wildcard $(RTL_DIR)/core/*.sv) \
-        $(wildcard $(RTL_DIR)/core/pipeline/*.sv) \
-        $(wildcard $(RTL_DIR)/core/exec/*.sv) \
-        $(wildcard $(RTL_DIR)/core/sys/*.sv) \
-        $(wildcard $(RTL_DIR)/core/sim/*.sv) \
-        $(wildcard $(RTL_DIR)/soc_testing/*.sv)
 
-SRCS = $(RTL_DIR)/include/riscv_pkg.sv $(VSRCS)
+SRCS = $(RTL_DIR)/include/riscv_pkg.sv \
+       $(wildcard $(RTL_DIR)/core/*.sv) \
+       $(wildcard $(RTL_DIR)/core/pipeline/*.sv) \
+       $(wildcard $(RTL_DIR)/core/exec/*.sv) \
+       $(wildcard $(RTL_DIR)/core/sys/*.sv) \
+       $(wildcard $(RTL_DIR)/core/sim/*.sv) \
+       $(wildcard $(RTL_DIR)/soc_testing/*.sv)
+
 CPP_TB = $(TB_DIR)/sim_main.cpp
 
 VERILATOR_FLAGS = -Wall --cc --exe --trace \
                   --top-module $(TOP) \
                   -I$(INC_DIR)
 
-# Default test for Spike Co-Simulation
 TEST ?= alu_test
 
-# ------------------------------------------------------------------------------
 # TARGETS
-# ------------------------------------------------------------------------------
-
-all: sim
-
 # 1. COMPILE HARDWARE ONLY (Verilog -> C++ -> Exe)
-# Does NOT touch the software folder
 hw:
 	verilator $(VERILATOR_FLAGS) $(SRCS) $(CPP_TB)
 	$(MAKE) -C $(OBJ_DIR) -f V$(TOP).mk
 
-# 2. COMPILE DEFAULT SOFTWARE (main.c -> program.hex)
+# 2. COMPILE DEFAULT SOFTWARE (sw/main.c -> program.hex)
 sw:
 	$(MAKE) -C sw
 
@@ -43,8 +35,8 @@ sw:
 sim: sw hw
 	./$(OBJ_DIR)/V$(TOP)
 
-# 4. RUN SANITY CHECK
-sanity: clean hw
+# 4. RUN SANITY CHECK ()
+sanity: hw
 	riscv64-unknown-elf-gcc -mcmodel=medany -march=rv64im -mabi=lp64 -nostdlib -T sw/link.ld -o dv/tests/bin/sanity.elf sw/crt0.s dv/tests/src/sanity_check.c
 	riscv64-unknown-elf-objcopy -O binary dv/tests/bin/sanity.elf dv/tests/bin/sanity.bin
 	hexdump -v -e '1/4 "%08x\n"' dv/tests/bin/sanity.bin > sw/program.hex
@@ -52,7 +44,7 @@ sanity: clean hw
 	./$(OBJ_DIR)/V$(TOP)
 
 # 5. SPIKE CO-SIMULATION
-spike: clean hw regression
+spike: regression
 	@echo "🔍 Running Spike Co-Simulation for: $(TEST)"
 	hexdump -v -e '1/4 "%08x\n"' dv/tests/bin/$(TEST).bin > sw/program.hex
 	$(MAKE) hw
@@ -84,7 +76,7 @@ clean:
 	rm -f sw/program.hex
 
 # Run all tests
-regression: clean hw
+regression: hw
 	python3 dv/tests/scripts/run_regression.py
 
-.PHONY: all hw sw sim sanity spike regression clean
+.PHONY: hw sw sim sanity spike regression clean

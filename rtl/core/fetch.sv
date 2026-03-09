@@ -13,7 +13,6 @@ module fetch (
     // Stall Logic
     // If the buffer is empty stall the pipeline
     assign stall_fetch_o = ~pf_valid_i;
-
     // If the buffer is empty pass NOP (0x00000013) to the bus
     assign instr_o  = pf_valid_i ? pf_instr_i : 32'h00000013;
     assign pc_out_o = pf_pc_i;

@@ -17,9 +17,7 @@ module regfile (
 
     logic [63:0] regs [0:31];
 
-    // ---------------------------------------------------------
     // WRITE LOGIC (Sequential)
-    // ---------------------------------------------------------
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (int i=0; i<32; i++) regs[i] <= 64'b0;
@@ -30,9 +28,7 @@ module regfile (
         end
     end
 
-    // ---------------------------------------------------------
     // READ LOGIC (Combinational with Internal Forwarding)
-    // ---------------------------------------------------------
     always_comb begin
         // Port 1
         if (rs1_addr_i == 5'd0) begin

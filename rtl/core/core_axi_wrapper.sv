@@ -66,9 +66,9 @@ module core_axi_wrapper (
     assign axi_i_araddr  = ibus_addr;
     assign axi_i_arvalid = ibus_req;
     assign axi_i_arprot  = 3'b100; // Unprivileged, Secure, Instruction Access
-    assign axi_i_rready  = 1'b1;   // Core is always ready to accept instruction
-
     assign ibus_gnt      = axi_i_arready;
+
+    assign axi_i_rready  = 1'b1;   // Master is always ready to accept instruction
     assign ibus_rvalid   = axi_i_rvalid;
     assign ibus_rdata    = axi_i_rdata;
 
@@ -77,32 +77,29 @@ module core_axi_wrapper (
     // =========================================================    
     
     // --- READ CHANNELS (AR / R) ---
-    assign axi_d_arvalid = dbus_req & ~dbus_we; // ONLY if we are NOT writing
+    assign axi_d_arvalid = dbus_req & ~dbus_we;
     assign axi_d_araddr  = dbus_addr;
-    assign axi_d_arprot  = 3'b000; 
+    assign axi_d_arprot  = 3'b000; // Unprivileged, Secure, Data Access
     assign axi_d_rready  = 1'b1;   // Core is always ready to accept data
 
     // --- WRITE CHANNELS (AW / W / B) ---
-    assign axi_d_awvalid = dbus_req & dbus_we;  // ONLY if we ARE writing
+    assign axi_d_awvalid = dbus_req & dbus_we;
     assign axi_d_awaddr  = dbus_addr;
     assign axi_d_awprot  = 3'b000;
     
-    assign axi_d_wvalid  = dbus_req & dbus_we;  // Fire data at the same time as address
+    assign axi_d_wvalid  = dbus_req & dbus_we; 
     assign axi_d_wdata   = dbus_wdata;
     assign axi_d_wstrb   = dbus_be;
     
     assign axi_d_bready  = 1'b1;   // Core is always ready to accept "Write Success" response
-
-    // --- MULTIPLEXING BACK TO THE CORE ---
-    // The CPU only has one "Grant" and one "Valid" pin. We must route them based on the operation.
     
-    // Grant: If Write, we wait for both Address and Data to be accepted. If Read, just Address.
+    // Grant: Only if slave sends ready signal to accept what we are sending
     assign dbus_gnt    = dbus_we ? (axi_d_awready & axi_d_wready) : axi_d_arready;
     
-    // Valid: If Write, we wait for the 'B' (Response) channel. If Read, wait for the 'R' (Data) channel.
+    // Valid: If Write, we wait for the 'B' (Response) channel. If Read, wait for the 'R' (Data) channel
     assign dbus_rvalid = dbus_we ? axi_d_bvalid : axi_d_rvalid;
     
-    // Data is directly routed (it is ignored by the CPU during writes anyway)
+    // Data is directly routed
     assign dbus_rdata  = axi_d_rdata;
 
     // =========================================================
@@ -130,8 +127,6 @@ module core_axi_wrapper (
     // =========================================================
     // UNUSED SIGNALS SINK
     // =========================================================
-    // AXI returns response codes (0=OKAY, 2=SLVERR, etc.). 
-    // We don't support memory faults yet, so we sink them safely.
     /* verilator lint_off UNUSED */
     logic [1:0] unused_i_rresp;
     logic [1:0] unused_d_rresp;
